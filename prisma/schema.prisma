@@ -1,0 +1,178 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String         @id @default(cuid())
+  clerkId        String         @unique
+  email          String?        @unique
+  role           UserRole       @default(BIG_MANAGER)
+  onboardingStep OnboardingStep @default(STORE)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  stores         Store[]
+}
+
+model Store {
+  id             String          @id @default(cuid())
+  name           String
+  country        String          @default("BE")
+  city           String
+  address        String?
+  managerId      String
+  openingTime    DateTime?       @db.Time(0)
+  closingTime    DateTime?       @db.Time(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  employees      Employee[]
+  schedules      Schedule[]
+  shiftTemplates ShiftTemplate[]
+  manager        User            @relation(fields: [managerId], references: [id])
+  workTypes      WorkType[]
+
+  @@unique([managerId, name])
+}
+
+model Employee {
+  id                  String             @id @default(cuid())
+  storeId             String
+  name                String
+  email               String?
+  phone               String?
+  color               String
+  canWorkAcrossStores Boolean            @default(false)
+  contractType        ContractType       @default(FULL_TIME)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  weeklyMinutesTarget Int                @default(2400)
+  assignments         Assignment[]
+  availability        Availability[]
+  store               Store              @relation(fields: [storeId], references: [id])
+  roles               EmployeeWorkType[]
+
+  @@unique([storeId, email])
+}
+
+model Availability {
+  id         String    @id @default(cuid())
+  employeeId String
+  day        Weekday
+  isOff      Boolean   @default(false)
+  startTime  DateTime? @db.Time(0)
+  endTime    DateTime? @db.Time(0)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, day])
+}
+
+model ShiftTemplate {
+  id          String       @id @default(cuid())
+  storeId     String
+  role        String
+  workTypeId  String?
+  days        Json
+  startTime   DateTime     @db.Time(0)
+  endTime     DateTime     @db.Time(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  assignments Assignment[]
+  store       Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  workType    WorkType?    @relation(fields: [workTypeId], references: [id])
+}
+
+model Schedule {
+  id          String        @id @default(cuid())
+  storeId     String
+  isoWeek     String
+  state       ScheduleState @default(Draft)
+  generatedAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  assignments Assignment[]
+  store       Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, isoWeek])
+}
+
+model Assignment {
+  id               String         @id @default(cuid())
+  scheduleId       String
+  day              Weekday
+  startTime        DateTime       @db.Time(0)
+  endTime          DateTime       @db.Time(0)
+  role             String
+  employeeId       String?
+  sourceTemplateId String?
+  locked           Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  employee         Employee?      @relation(fields: [employeeId], references: [id])
+  schedule         Schedule       @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  sourceTemplate   ShiftTemplate? @relation(fields: [sourceTemplateId], references: [id])
+
+  @@index([scheduleId, day, startTime])
+}
+
+model WorkType {
+  id        String             @id @default(cuid())
+  storeId   String
+  name      String
+  color     String?            @default("#0f172a")
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  employees EmployeeWorkType[]
+  shifts    ShiftTemplate[]
+  store     Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, name])
+}
+
+model EmployeeWorkType {
+  employeeId String
+  workTypeId String
+  assignedAt DateTime @default(now())
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  workType   WorkType @relation(fields: [workTypeId], references: [id], onDelete: Cascade)
+
+  @@id([employeeId, workTypeId])
+}
+
+enum UserRole {
+  BIG_MANAGER
+}
+
+enum ContractType {
+  FULL_TIME
+  PART_TIME
+  STUDENT
+}
+
+enum OnboardingStep {
+  STORE
+  EMPLOYEES
+  SHIFTS
+  DONE
+}
+
+enum Weekday {
+  MON
+  TUE
+  WED
+  THU
+  FRI
+  SAT
+  SUN
+}
+
+enum ScheduleState {
+  Draft
+  Published
+}
