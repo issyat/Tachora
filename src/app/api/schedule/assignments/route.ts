@@ -13,7 +13,11 @@ interface AssignmentResponse {
   day: Weekday;
   startTime: string;
   endTime: string;
-  role: string;
+  workType: {
+    id: string;
+    name: string;
+    color: string;
+  };
   locked: boolean;
   employee?: {
     id: string;
@@ -23,7 +27,7 @@ interface AssignmentResponse {
   };
   sourceTemplate?: {
     id: string;
-    role: string;
+    workTypeId: string;
   };
 }
 
@@ -75,6 +79,7 @@ export async function GET(request: Request) {
               },
             },
             sourceTemplate: true,
+            workType: true,
           },
           orderBy: [
             { day: 'asc' },
@@ -96,7 +101,11 @@ export async function GET(request: Request) {
       day: assignment.day,
       startTime: timeDateToString(assignment.startTime, "09:00"),
       endTime: timeDateToString(assignment.endTime, "17:00"),
-      role: assignment.role,
+      workType: {
+        id: assignment.workType.id,
+        name: assignment.workType.name,
+        color: assignment.workType.color || '#0f172a',
+      },
       locked: assignment.locked,
       employee: assignment.employee
         ? {
@@ -112,7 +121,7 @@ export async function GET(request: Request) {
       sourceTemplate: assignment.sourceTemplate
         ? {
             id: assignment.sourceTemplate.id,
-            role: assignment.sourceTemplate.role,
+            workTypeId: assignment.sourceTemplate.workTypeId,
           }
         : undefined,
     }));
@@ -144,9 +153,9 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { storeId, day, role, startTime, endTime, employeeId, sourceTemplateId, weekId } = body ?? {};
+    const { storeId, day, workTypeId, startTime, endTime, employeeId, sourceTemplateId, weekId } = body ?? {};
 
-    if (!storeId || !day || !role || !startTime || !endTime || !employeeId) {
+    if (!storeId || !day || !workTypeId || !startTime || !endTime || !employeeId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
@@ -177,7 +186,7 @@ export async function POST(request: Request) {
       store,
       isoWeek,
       day,
-      role,
+      workTypeId,
       startTime,
       endTime,
       employeeId,
@@ -188,7 +197,7 @@ export async function POST(request: Request) {
       console.error("Assignment validation failed:", {
         storeId,
         day,
-        role,
+        workTypeId,
         startTime,
         endTime,
         employeeId,
@@ -222,7 +231,7 @@ export async function POST(request: Request) {
         day: day as Weekday,
         startTime: new Date(`1970-01-01T${startTime}:00Z`),
         endTime: new Date(`1970-01-01T${endTime}:00Z`),
-        role,
+        workTypeId,
         employeeId,
         sourceTemplateId: sourceTemplateId ?? validation.template?.id ?? null,
       },
@@ -233,6 +242,7 @@ export async function POST(request: Request) {
           },
         },
         sourceTemplate: true,
+        workType: true,
       },
     });
 
@@ -241,7 +251,11 @@ export async function POST(request: Request) {
       day: assignment.day,
       startTime: timeDateToString(assignment.startTime, startTime),
       endTime: timeDateToString(assignment.endTime, endTime),
-      role: assignment.role,
+      workType: {
+        id: assignment.workType.id,
+        name: assignment.workType.name,
+        color: assignment.workType.color || '#0f172a',
+      },
       locked: assignment.locked,
       employee: assignment.employee
         ? {
@@ -257,7 +271,7 @@ export async function POST(request: Request) {
       sourceTemplate: assignment.sourceTemplate
         ? {
             id: assignment.sourceTemplate.id,
-            role: assignment.sourceTemplate.role,
+            workTypeId: assignment.sourceTemplate.workTypeId,
           }
         : undefined,
     };

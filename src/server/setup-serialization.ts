@@ -19,7 +19,9 @@ type EmployeeWithRelations = Employee & {
   roles: Array<EmployeeWorkType & { workType: WorkType | null }>;
 };
 
-type TemplateWithRelations = ShiftTemplate;
+type TemplateWithRelations = ShiftTemplate & {
+  workType: WorkType | null;
+};
 
 type WorkTypeLike = WorkType;
 
@@ -90,8 +92,12 @@ export function serializeShiftTemplates(templates: TemplateWithRelations[]): Shi
 
     return {
       id: template.id,
-      role: template.role,
-      workTypeId: template.workTypeId ?? null,
+      workTypeId: template.workTypeId,
+      workType: template.workType ? {
+        id: template.workType.id,
+        name: template.workType.name,
+        color: template.workType.color ?? "#0f172a",
+      } : null,
       days,
       startTime: timeDateToString(template.startTime, DEFAULT_START),
       endTime: timeDateToString(template.endTime, DEFAULT_END),

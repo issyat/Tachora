@@ -12,7 +12,11 @@ interface FastAssignmentResponse {
   day: Weekday;
   startTime: string;
   endTime: string;
-  role: string;
+  workType: {
+    id: string;
+    name: string;
+    color: string;
+  };
   locked: boolean;
   employee?: {
     id: string;
@@ -22,7 +26,7 @@ interface FastAssignmentResponse {
   };
   sourceTemplate?: {
     id: string;
-    role: string;
+    workTypeId: string;
   };
 }
 
@@ -35,9 +39,9 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { storeId, day, role, startTime, endTime, employeeId, sourceTemplateId, weekId } = body ?? {};
+    const { storeId, day, workTypeId, startTime, endTime, employeeId, sourceTemplateId, weekId } = body ?? {};
 
-    if (!storeId || !day || !role || !startTime || !endTime || !employeeId) {
+    if (!storeId || !day || !workTypeId || !startTime || !endTime || !employeeId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
@@ -59,6 +63,15 @@ export async function POST(request: Request) {
 
     const isoWeek = ensureIsoWeekId(weekId, new Date());
 
+    // Get the work type for this assignment
+    const workType = await prisma.workType.findUnique({
+      where: { id: workTypeId },
+    });
+
+    if (!workType) {
+      return NextResponse.json({ error: "Work type not found" }, { status: 404 });
+    }
+
     // Validate employee and work types
     const employee = await prisma.employee.findUnique({
       where: { id: employeeId },
@@ -75,41 +88,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Employee not found" }, { status: 404 });
     }
 
-    // Check if the shift has a work type requirement
-    let requiredWorkType = null;
-    if (sourceTemplateId) {
-      const template = await prisma.shiftTemplate.findUnique({
-        where: { id: sourceTemplateId },
-        include: { workType: true }
-      });
-      requiredWorkType = template?.workType;
-    }
-
-    // If there's a required work type, validate employee can perform it
-    if (requiredWorkType) {
-      const employeeWorkTypes = employee.roles.map(role => role.workType.id);
-      if (!employeeWorkTypes.includes(requiredWorkType.id)) {
-        const employeeWorkTypeNames = employee.roles.map(r => r.workType.name);
+    // Check if employee can perform this work type
+    if (employee.roles.length > 0) {
+      const employeeWorkTypeIds = employee.roles.map(role => role.workType.id);
+      const employeeWorkTypeNames = employee.roles.map(role => role.workType.name.toLowerCase());
+      
+      // For cross-store employees, validate by work type name instead of ID
+      const canWorkByName = employeeWorkTypeNames.includes(workType.name.toLowerCase());
+      const canWorkById = employeeWorkTypeIds.includes(workTypeId);
+      
+      if (!canWorkById && !canWorkByName) {
+        const employeeWorkTypeDisplayNames = employee.roles.map(r => r.workType.name);
         return NextResponse.json({ 
           error: "Work Type Mismatch",
           code: "WORK_TYPE_MISMATCH",
-          details: `${employee.name} cannot work as ${requiredWorkType.name}.`,
-          suggestion: employeeWorkTypeNames.length > 0 
-            ? `They can work as: ${employeeWorkTypeNames.join(', ')}`
+          details: `${employee.name} cannot work as ${workType.name}.`,
+          suggestion: employeeWorkTypeDisplayNames.length > 0 
+            ? `They can work as: ${employeeWorkTypeDisplayNames.join(', ')}`
             : `They have no work types assigned. Please assign work types in the Employees page.`
-        }, { status: 422 });
-      }
-    }
-
-    // Additional validation: if employee has work types but shift role doesn't match any
-    if (employee.roles.length > 0) {
-      const employeeWorkTypeNames = employee.roles.map(r => r.workType.name.toLowerCase());
-      if (!employeeWorkTypeNames.includes(role.toLowerCase())) {
-        return NextResponse.json({ 
-          error: "Role Mismatch",
-          code: "ROLE_MISMATCH", 
-          details: `${employee.name} cannot work as ${role}.`,
-          suggestion: `They can work as: ${employee.roles.map(r => r.workType.name).join(', ')}`
         }, { status: 422 });
       }
     }
@@ -137,7 +133,7 @@ export async function POST(request: Request) {
         day: day as Weekday,
         startTime: new Date(`1970-01-01T${startTime}:00Z`),
         endTime: new Date(`1970-01-01T${endTime}:00Z`),
-        role,
+        workTypeId,
         employeeId,
         sourceTemplateId: sourceTemplateId || null,
       },
@@ -148,6 +144,7 @@ export async function POST(request: Request) {
           },
         },
         sourceTemplate: true,
+        workType: true,
       },
     });
 
@@ -156,7 +153,11 @@ export async function POST(request: Request) {
       day: assignment.day,
       startTime: timeDateToString(assignment.startTime, startTime),
       endTime: timeDateToString(assignment.endTime, endTime),
-      role: assignment.role,
+      workType: {
+        id: assignment.workType.id,
+        name: assignment.workType.name,
+        color: assignment.workType.color || '#0f172a',
+      },
       locked: assignment.locked,
       employee: assignment.employee
         ? {
@@ -172,7 +173,7 @@ export async function POST(request: Request) {
       sourceTemplate: assignment.sourceTemplate
         ? {
             id: assignment.sourceTemplate.id,
-            role: assignment.sourceTemplate.role,
+            workTypeId: assignment.sourceTemplate.workTypeId,
           }
         : undefined,
     };

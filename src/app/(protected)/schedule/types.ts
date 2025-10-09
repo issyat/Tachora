@@ -2,8 +2,12 @@
 
 export interface Template {
   id: string;
-  role: string;
-  workTypeId: string | null;
+  workTypeId: string;
+  workType: {
+    id: string;
+    name: string;
+    color: string;
+  } | null;
   days: Record<DayKey, boolean> | Record<string, boolean>;
   startTime: string;
   endTime: string;
@@ -48,7 +52,11 @@ export interface Assignment {
   day: DayKey;
   startTime: string;
   endTime: string;
-  role: string;
+  workType: {
+    id: string;
+    name: string;
+    color: string;
+  };
   locked: boolean;
   employee?: {
     id: string;
@@ -58,7 +66,7 @@ export interface Assignment {
   };
   sourceTemplate?: {
     id: string;
-    role: string;
+    workTypeId: string;
   };
 }
 

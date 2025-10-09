@@ -95,13 +95,19 @@ class CPSATSolver:
         logger.info(f"Starting optimized CP-SAT solve for store {request.store_id}, week {request.iso_week}")
         logger.info(f"Employees: {len(request.employees)}, Shifts: {len(request.shifts)}")
         
+        # Log which algorithm will be used
+        if len(request.shifts) > 50 or len(request.employees) > 25:
+            logger.info("Will use GREEDY algorithm (large problem)")
+        else:
+            logger.info("Will use CP-SAT algorithm (optimal solving)")
+        
         # Quick feasibility check
         if not self._quick_feasibility_check(request):
             return self._create_infeasible_response(request, "Quick feasibility check failed")
         
-        # Use greedy algorithm for large problems or as fallback
-        if len(request.shifts) > 30 or len(request.employees) > 15:
-            logger.info("Large problem detected, using greedy algorithm")
+        # Use greedy algorithm for very large problems or as fallback
+        if len(request.shifts) > 50 or len(request.employees) > 25:
+            logger.info("Very large problem detected, using greedy algorithm")
             return self._solve_greedy(request)
         
         # Build shift slots for multi-capacity shifts
@@ -117,11 +123,15 @@ class CPSATSolver:
         assign_vars: Dict[Tuple[str, str, int], cp_model.IntVar] = {}
         uncovered_vars: Dict[Tuple[str, int], cp_model.IntVar] = {}
         
-        # Simplified employee workload tracking (only total minutes)
-        employee_minutes: Dict[str, cp_model.LinearExpr] = {
-            emp.id: model.NewConstant(employee_metrics[emp.id]['locked_minutes'])
-            for emp in request.employees
-        }
+        # Employee workload tracking with proper integer variables
+        employee_minutes: Dict[str, cp_model.IntVar] = {}
+        for emp in request.employees:
+            weekly_limit = self._get_weekly_limit(emp)
+            employee_minutes[emp.id] = model.NewIntVar(
+                employee_metrics[emp.id]['locked_minutes'],  # minimum (locked minutes)
+                weekly_limit,  # maximum (weekly limit)
+                f"minutes_{emp.id}"
+            )
         
         logger.info("Creating optimized decision variables...")
         
@@ -130,10 +140,8 @@ class CPSATSolver:
         for shift in request.shifts:
             for slot in slots_by_shift[shift.id]:
                 if slot.locked_employee_id:
-                    # Update locked employee workload
-                    employee_minutes[slot.locked_employee_id] = (
-                        employee_minutes[slot.locked_employee_id] + slot.duration
-                    )
+                    # Locked assignments are already included in the initial value
+                    pass
                 else:
                     # Find feasible employees (pre-filtered)
                     feasible_employees = self._find_feasible_employees_for_shift(shift, request.employees)
@@ -158,8 +166,7 @@ class CPSATSolver:
                         slot_vars.append(var)
                         total_variables += 1
                         
-                        # Update employee workload when assigned
-                        employee_minutes[employee.id] = employee_minutes[employee.id] + slot.duration * var
+                        # Workload will be constrained after all variables are created
                     
                     # Exactly one employee per slot (or uncovered if allowed)
                     if request.options.allow_uncovered and (shift.id, slot.slot_number) in uncovered_vars:
@@ -169,11 +176,30 @@ class CPSATSolver:
         
         logger.info(f"Created {total_variables} decision variables")
         
-        # Simplified constraints for performance
+        # CRITICAL: Add no-overlap constraints to prevent conflicting assignments
+        logger.info("Adding no-overlap constraints...")
         for employee in request.employees:
-            # Only weekly hour limits (skip daily limits for performance)
-            weekly_limit = self._get_weekly_limit(employee)
-            model.Add(employee_minutes[employee.id] <= weekly_limit)
+            self._add_no_overlap_constraints(model, employee, all_slots, assign_vars)
+        
+        # Add workload constraints
+        logger.info("Adding workload constraints...")
+        for employee in request.employees:
+            # Calculate total assigned minutes for this employee
+            assigned_minutes = []
+            for shift in request.shifts:
+                for slot in slots_by_shift[shift.id]:
+                    if not slot.locked_employee_id:  # Skip locked slots
+                        var = assign_vars.get((employee.id, shift.id, slot.slot_number))
+                        if var is not None:
+                            assigned_minutes.append(slot.duration * var)
+            
+            # Constraint: employee_minutes[employee.id] = locked_minutes + sum(assigned_minutes)
+            if assigned_minutes:
+                model.Add(employee_minutes[employee.id] == 
+                         employee_metrics[employee.id]['locked_minutes'] + sum(assigned_minutes))
+            else:
+                # No possible assignments for this employee
+                model.Add(employee_minutes[employee.id] == employee_metrics[employee.id]['locked_minutes'])
         
         # Simplified objective (just minimize uncovered shifts)
         objective_terms = []
@@ -323,8 +349,15 @@ class CPSATSolver:
         for emp in employees:
             # Check work type compatibility
             if shift.work_type_id:
-                if shift.work_type_id not in emp.role_ids:
-                    continue
+                # For cross-store employees, validate by work type name instead of ID
+                if emp.home_store_id == shift.store_id:
+                    # Same store - validate by exact work type ID
+                    if shift.work_type_id not in emp.role_ids:
+                        continue
+                else:
+                    # Cross-store - validate by work type name (more flexible)
+                    if emp.role_names and shift.role.lower() not in [r.lower() for r in emp.role_names]:
+                        continue
             elif emp.role_names and shift.role.lower() not in [r.lower() for r in emp.role_names]:
                 continue
             
@@ -362,23 +395,15 @@ class CPSATSolver:
         self, 
         model: cp_model.CpModel,
         slot: ShiftSlot,
-        employee_minutes: Dict[str, cp_model.LinearExpr],
-        daily_minutes: Dict[Tuple[str, Weekday], cp_model.LinearExpr]
+        employee_minutes: Dict[str, cp_model.IntVar],
+        daily_minutes: Dict[Tuple[str, Weekday], cp_model.IntVar]
     ):
         """Add constraints for locked assignments"""
         if not slot.locked_employee_id:
             return
         
-        # Update employee workload
-        employee_minutes[slot.locked_employee_id] = (
-            employee_minutes[slot.locked_employee_id] + slot.duration
-        )
-        
-        # Update daily workload
-        daily_key = (slot.locked_employee_id, slot.shift.day)
-        if daily_key not in daily_minutes:
-            daily_minutes[daily_key] = model.NewConstant(0)
-        daily_minutes[daily_key] = daily_minutes[daily_key] + slot.duration
+        # Locked assignments are handled in the workload constraint calculation
+        # No need to update variables here since they're already included in initial values
 
     def _add_no_overlap_constraints(
         self,
@@ -392,24 +417,24 @@ class CPSATSolver:
         
         for slot in all_slots:
             if slot.locked_employee_id == employee.id:
-                # Locked assignment - create fixed interval
+                # Locked assignment - create fixed interval (just the shift duration, no rest time)
                 start = slot.day_start_minute
                 interval = model.NewIntervalVar(
                     start,
-                    slot.duration + MIN_REST_MINUTES,
-                    start + slot.duration + MIN_REST_MINUTES,
+                    slot.duration,
+                    start + slot.duration,
                     f"locked_interval_{employee.id}_{slot.shift.id}_{slot.slot_number}"
                 )
                 employee_intervals.append(interval)
             else:
                 # Optional assignment - create conditional interval
                 var = assign_vars.get((employee.id, slot.shift.id, slot.slot_number))
-                if var:
+                if var is not None:
                     start = slot.day_start_minute
                     interval = model.NewOptionalIntervalVar(
                         start,
-                        slot.duration + MIN_REST_MINUTES,
-                        start + slot.duration + MIN_REST_MINUTES,
+                        slot.duration,
+                        start + slot.duration,
                         var,
                         f"interval_{employee.id}_{slot.shift.id}_{slot.slot_number}"
                     )
@@ -552,8 +577,9 @@ class CPSATSolver:
                 best_employee = feasible[0]
                 shift_duration = shift.end_minute - shift.start_minute
                 
-                # Check if employee can take this shift
-                if employee_workload[best_employee.id] + shift_duration <= self._get_weekly_limit(best_employee):
+                # Check if employee can take this shift (weekly limit + no overlaps)
+                if (employee_workload[best_employee.id] + shift_duration <= self._get_weekly_limit(best_employee) and
+                    not self._has_overlapping_assignment(best_employee.id, shift, assignments)):
                     assignments.append(AssignmentSegment(
                         shift_id=shift.id,
                         day=shift.day,
@@ -605,12 +631,29 @@ class CPSATSolver:
                 score += 10.0
             
             # Prefer employees with exact role match
-            if shift.work_type_id and shift.work_type_id in emp.role_ids:
-                score += 5.0
+            if shift.work_type_id:
+                if emp.home_store_id == shift.store_id and shift.work_type_id in emp.role_ids:
+                    # Same store with exact work type ID match
+                    score += 5.0
+                elif emp.home_store_id != shift.store_id and emp.role_names and shift.role.lower() in [r.lower() for r in emp.role_names]:
+                    # Cross-store with work type name match
+                    score += 3.0  # Slightly lower bonus for cross-store
             
             return score
         
         return sorted(employees, key=score_employee, reverse=True)
+
+    def _has_overlapping_assignment(
+        self, employee_id: str, new_shift: Shift, existing_assignments: List[AssignmentSegment]
+    ) -> bool:
+        """Check if assigning this shift would create an overlap for the employee"""
+        for assignment in existing_assignments:
+            if (assignment.employee_id == employee_id and 
+                assignment.day == new_shift.day and
+                not (new_shift.end_minute <= assignment.start_minute or 
+                     new_shift.start_minute >= assignment.end_minute)):
+                return True
+        return False
 
     def _create_infeasible_response(self, request: SolveRequest, reason: str) -> SolveResponse:
         """Create a response for infeasible problems"""

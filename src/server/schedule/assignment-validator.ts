@@ -19,7 +19,7 @@ export interface AssignmentValidationInput {
   };
   isoWeek?: string | null;
   day: Weekday;
-  role: string;
+  workTypeId: string;
   startTime: string; // HH:mm
   endTime: string;   // HH:mm
   employeeId: string;
@@ -252,32 +252,22 @@ export async function validateAssignment(
   }
 
   if (employee && errors.length === 0) {
-    const roleIds = employee.roles.map((pivot) => pivot.workTypeId).filter(Boolean) as string[];
-    const roleNames = employee.roles
-      .map((pivot) => pivot.workType?.name?.toLowerCase())
+    const employeeWorkTypeIds = employee.roles.map((pivot) => pivot.workTypeId).filter(Boolean) as string[];
+    const employeeWorkTypeNames = employee.roles
+      .map((pivot) => pivot.workType?.name)
       .filter((name): name is string => Boolean(name));
 
-    // Only validate roles if the employee has specific role assignments
-    if (roleIds.length > 0) {
-      if (template?.workTypeId) {
-        // If we have a template with a specific work type, check that
-        if (!roleIds.includes(template.workTypeId)) {
-          addError(errors, {
-            code: 'role_mismatch',
-            message: `${employee.name} is not assigned to the required work type for this shift.`,
-          });
-        }
-      } else {
-        // If no template or template has no work type, check role name match
-        if (!roleNames.includes(input.role.toLowerCase())) {
-          addError(errors, {
-            code: 'role_mismatch',
-            message: `${employee.name} is not assigned to the ${input.role} role.`,
-          });
-        }
+    // Only validate work types if the employee has specific work type assignments
+    if (employeeWorkTypeIds.length > 0) {
+      // Check if employee has the required work type for this assignment
+      if (!employeeWorkTypeIds.includes(input.workTypeId)) {
+        addError(errors, {
+          code: 'role_mismatch',
+          message: `${employee.name} cannot work this shift type. They can work as: ${employeeWorkTypeNames.join(', ')}.`,
+        });
       }
     }
-    // If employee has no role assignments, allow any assignment (flexible assignment)
+    // If employee has no work type assignments, allow any assignment (flexible assignment)
   }
 
   let weeklyMinutesWorked = 0;

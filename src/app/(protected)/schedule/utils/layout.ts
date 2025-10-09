@@ -3,7 +3,12 @@ import { minutesToTime, timeToMinutes } from "../utils/time";
 import type { Assignment, DayKey, Template } from "../types";
 
 export interface Block {
-  role: string;
+  role: string; // Keep for backward compatibility during transition
+  workType?: {
+    id: string;
+    name: string;
+    color: string;
+  };
   startMin: number;
   endMin: number;
   assignment?: Assignment;
@@ -36,7 +41,7 @@ function layoutDay(day: DayKey, blocks: Block[]): DayLayout {
     if (a.startMin !== b.startMin) {
       return a.startMin - b.startMin;
     }
-    return a.role.localeCompare(b.role);
+    return (a.role || '').localeCompare(b.role || '');
   });
   
   const placed: LaidBlock[] = [];
@@ -81,45 +86,27 @@ export function buildLayouts(
     return acc;
   }, {} as Record<DayKey, Block[]>);
 
-  const groups = new Map<string, Assignment[]>();
+  // Group assignments by time slot and work type for capacity management
+  const assignmentsBySlot = new Map<string, Assignment[]>();
   assignments.forEach((assignment) => {
-    const key = `${assignment.day}|${assignment.role}|${assignment.startTime}|${assignment.endTime}`;
-    const list = groups.get(key) ?? [];
-    list.push(assignment);
-    groups.set(key, list);
-  });
-
-  assignments.forEach((assignment) => {
-    // Skip invalid or empty assignments
     if (!assignment || typeof assignment !== 'object' || !assignment.day || !assignment.startTime || !assignment.endTime) {
       console.warn('Skipping invalid assignment:', assignment);
       return;
     }
 
-    const start = timeToMinutes(assignment.startTime);
-    const end = timeToMinutes(assignment.endTime);
-    
-    // Defensive check: ensure the day exists in dayMap
-    if (!dayMap[assignment.day]) {
-      console.error(`Invalid assignment day: "${assignment.day}". Expected one of: ${DAY_ORDER.join(', ')}`);
-      console.error('Assignment object:', assignment);
-      return;
-    }
-    
-    // Don't clamp assignments - use their actual times
-    dayMap[assignment.day].push({
-      role: assignment.role,
-      startMin: start,
-      endMin: end,
-      assignment,
-      templateId: assignment.sourceTemplate?.id ?? null,
-    });
+    const workTypeName = assignment.workType?.name || 'No Work Type';
+    const key = `${assignment.day}|${workTypeName}|${assignment.startTime}|${assignment.endTime}`;
+    const list = assignmentsBySlot.get(key) ?? [];
+    list.push(assignment);
+    assignmentsBySlot.set(key, list);
   });
 
+  // Group templates by time slot and work type
+  const templatesBySlot = new Map<string, Template[]>();
   templates.forEach((template) => {
     const start = timeToMinutes(template.startTime);
     const end = timeToMinutes(template.endTime);
-    const { start: s, end: e, valid } = clampToWindow(start, end, windowStartMin, windowEndMin);
+    const { valid } = clampToWindow(start, end, windowStartMin, windowEndMin);
     if (!valid) {
       return;
     }
@@ -128,16 +115,83 @@ export function buildLayouts(
       if (!template.days?.[day]) {
         return;
       }
-      const key = `${day}|${template.role}|${template.startTime}|${template.endTime}`;
-      if (!groups.get(key)?.length) {
-        dayMap[day].push({
-          role: template.role,
+      const workTypeName = template.workType?.name || 'No Work Type';
+      const key = `${day}|${workTypeName}|${template.startTime}|${template.endTime}`;
+      const list = templatesBySlot.get(key) ?? [];
+      list.push(template);
+      templatesBySlot.set(key, list);
+    });
+  });
+
+  // Process each time slot and create blocks based on template capacity
+  templatesBySlot.forEach((templatesInSlot, key) => {
+    const [day, workTypeName, startTime, endTime] = key.split('|');
+    const dayKey = day as DayKey;
+    
+    if (!dayMap[dayKey]) {
+      return;
+    }
+
+    const start = timeToMinutes(startTime);
+    const end = timeToMinutes(endTime);
+    const assignmentsInSlot = assignmentsBySlot.get(key) || [];
+    
+    // Create blocks for each template in this slot
+    templatesInSlot.forEach((template, templateIndex) => {
+      // Check if this template slot is filled by an assignment
+      const assignmentForThisSlot = assignmentsInSlot[templateIndex];
+      
+      if (assignmentForThisSlot) {
+        // This template slot is filled - create an assignment block
+        dayMap[dayKey].push({
+          role: workTypeName,
+          workType: assignmentForThisSlot.workType,
+          startMin: start,
+          endMin: end,
+          assignment: assignmentForThisSlot,
+          templateId: template.id,
+        });
+      } else {
+        // This template slot is empty - create a template block
+        dayMap[dayKey].push({
+          role: workTypeName,
+          workType: template.workType || undefined,
           startMin: start,
           endMin: end,
           templateId: template.id,
         });
       }
     });
+  });
+
+  // Handle assignments that don't have corresponding templates (manual assignments)
+  assignmentsBySlot.forEach((assignmentsInSlot, key) => {
+    const [day, workTypeName, startTime, endTime] = key.split('|');
+    const dayKey = day as DayKey;
+    
+    if (!dayMap[dayKey]) {
+      return;
+    }
+
+    const templatesInSlot = templatesBySlot.get(key) || [];
+    
+    // Add any assignments that exceed template capacity
+    if (assignmentsInSlot.length > templatesInSlot.length) {
+      const excessAssignments = assignmentsInSlot.slice(templatesInSlot.length);
+      const start = timeToMinutes(startTime);
+      const end = timeToMinutes(endTime);
+      
+      excessAssignments.forEach((assignment) => {
+        dayMap[dayKey].push({
+          role: workTypeName,
+          workType: assignment.workType || undefined,
+          startMin: start,
+          endMin: end,
+          assignment,
+          templateId: assignment.sourceTemplate?.id ?? null,
+        });
+      });
+    }
   });
 
   return DAY_ORDER.reduce<Record<DayKey, DayLayout>>((acc, day) => {

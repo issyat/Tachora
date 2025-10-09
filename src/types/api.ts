@@ -144,8 +144,12 @@ export interface ShiftTemplateDays {
 
 export interface ShiftTemplateResponse {
   id: string;
-  role: string;
-  workTypeId?: string;
+  workTypeId: string;
+  workType: {
+    id: string;
+    name: string;
+    color: string;
+  } | null;
   days: ShiftTemplateDays;
   startTime: string; // HH:mm format
   endTime: string;   // HH:mm format

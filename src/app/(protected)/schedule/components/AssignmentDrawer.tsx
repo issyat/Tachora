@@ -16,7 +16,11 @@ export interface EmployeeSnapshot {
 
 export interface AssignmentSelection {
   day: DayKey;
-  role: string;
+  workType: {
+    id: string;
+    name: string;
+    color: string;
+  };
   startMin: number;
   endMin: number;
   templateId?: string | null;
@@ -52,7 +56,7 @@ export const AssignmentDrawer = memo(function AssignmentDrawer({
     return null;
   }
 
-  const { day, role, startMin, endMin, assignment } = selection;
+  const { day, workType, startMin, endMin, assignment } = selection;
   const dayIndex = DAY_TO_INDEX[day];
   const timeRangeLabel = `${minutesToTime(startMin)} - ${minutesToTime(endMin)}`;
   const durationLabel = formatMinutesAsHours(endMin - startMin);
@@ -77,7 +81,8 @@ export const AssignmentDrawer = memo(function AssignmentDrawer({
         const validationErrors = collectLocalValidationErrors({
           employee,
           day,
-          role,
+          workTypeId: workType.id,
+          workTypeName: workType.name,
           startMin,
           endMin,
           templateWorkTypeId,
@@ -97,13 +102,13 @@ export const AssignmentDrawer = memo(function AssignmentDrawer({
         };
       })
       .filter((item): item is NonNullable<typeof item> => Boolean(item));
-  }, [assignment?.id, day, dayIndex, employees, endMin, role, selection, snapshots, startMin, storeId, templateWorkTypes]);
+  }, [assignment?.id, day, dayIndex, employees, endMin, workType, selection, snapshots, startMin, storeId, templateWorkTypes]);
 
   return (
     <Modal open={Boolean(selection)} onClose={onClose} title="Shift details" widthClass="max-w-xl">
       <div className="space-y-4">
         <header className="space-y-1">
-          <h2 className="text-base font-semibold text-slate-900">{role}</h2>
+          <h2 className="text-base font-semibold text-slate-900">{workType.name}</h2>
           <p className="text-sm text-slate-500">{day} - {timeRangeLabel} ({durationLabel})</p>
         </header>
 

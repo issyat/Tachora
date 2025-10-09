@@ -130,7 +130,9 @@ export async function POST(request: Request) {
             },
           },
         },
-        shiftTemplates: true,
+        shiftTemplates: {
+          include: { workType: true },
+        },
       },
     });
 
@@ -170,7 +172,7 @@ export async function POST(request: Request) {
         if (!isActive) continue;
         shifts.push({
           id: templateShiftId(template.id, day),
-          role: template.role,
+          role: template.workType?.name || 'Unknown',
           day,
           start_minute: startMinute,
           end_minute: endMinute,
@@ -341,7 +343,7 @@ export async function POST(request: Request) {
             // Use the original template times, not the solver's converted times
             startTime: template.startTime,
             endTime: template.endTime,
-            role: template.role,
+            workTypeId: template.workTypeId,
             employeeId: assignment.employee_id,
             sourceTemplateId: template.id,
           },

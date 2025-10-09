@@ -11,7 +11,8 @@ export interface EmployeeAssignmentSegment {
 export interface LocalValidationParams {
   employee: Employee;
   day: DayKey;
-  role: string;
+  workTypeId: string;
+  workTypeName: string;
   startMin: number;
   endMin: number;
   templateWorkTypeId?: string | null;
@@ -26,7 +27,8 @@ export function collectLocalValidationErrors(params: LocalValidationParams): str
   const {
     employee,
     day,
-    role,
+    workTypeId,
+    workTypeName,
     startMin,
     endMin,
     templateWorkTypeId,
@@ -58,12 +60,18 @@ export function collectLocalValidationErrors(params: LocalValidationParams): str
     messages.push(`${employee.name} cannot work at this store.`);
   }
 
-  if (templateWorkTypeId && !(employee.roleIds ?? []).includes(templateWorkTypeId)) {
-    messages.push(`${employee.name} is not assigned to the required work type.`);
-  } else if ((employee.roles?.length ?? 0) > 0) {
-    const roleNames = (employee.roles ?? []).map((roleInfo) => roleInfo.name.toLowerCase());
-    if (roleNames.length > 0 && !roleNames.includes(role.toLowerCase())) {
-      messages.push(`${employee.name} is not assigned to the ${role} role.`);
+  // Check if employee can work this work type
+  if ((employee.roles?.length ?? 0) > 0) {
+    const employeeWorkTypeIds = (employee.roleIds ?? []);
+    const employeeWorkTypeNames = (employee.roles ?? []).map((roleInfo) => roleInfo.name.toLowerCase());
+    
+    // For cross-store employees, validate by work type name instead of ID
+    const canWorkByName = employeeWorkTypeNames.includes(workTypeName.toLowerCase());
+    const canWorkById = employeeWorkTypeIds.length > 0 && employeeWorkTypeIds.includes(workTypeId);
+    
+    if (!canWorkById && !canWorkByName) {
+      const roleNames = (employee.roles ?? []).map((roleInfo) => roleInfo.name);
+      messages.push(`${employee.name} cannot work as ${workTypeName}. They can work as: ${roleNames.join(', ')}.`);
     }
   }
 

@@ -65,9 +65,9 @@ export function ScheduleTimeline({
                 </div>
                 <div className="ml-16">
                   <div className="relative" style={{ height: minHeight }}>
-                    {blocks.map((block) => (
+                    {blocks.map((block, blockIndex) => (
                       <TimelineBlock
-                        key={`${day}-${block.role}-${block.startMin}-${block.lane}-${block.assignment?.id ?? block.templateId ?? 'template'}`}
+                        key={`${day}-${block.workType?.name || block.role}-${block.startMin}-${block.endMin}-${block.lane}-${block.assignment?.id ?? block.templateId ?? 'template'}-${blockIndex}`}
                         day={day}
                         block={block}
                         windowStartMin={windowStartMin}
@@ -127,7 +127,7 @@ function TimelineBlock({ day, block, windowStartMin, windowEndMin, onSelectBlock
       }}
     >
       <div className="flex items-center justify-between">
-        <span className="font-semibold text-slate-700">{block.role}</span>
+        <span className="font-semibold text-slate-700">{block.workType?.name || block.role}</span>
         <span className="font-medium text-slate-500">{describeShift(block.startMin, block.endMin)}</span>
       </div>
       {employee ? (

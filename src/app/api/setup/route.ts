@@ -70,6 +70,7 @@ export async function GET(request: Request) {
         orderBy: { createdAt: "asc" },
       },
       shiftTemplates: {
+        include: { workType: true },
         orderBy: { createdAt: "asc" },
       },
       workTypes: {

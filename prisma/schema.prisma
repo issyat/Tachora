@@ -76,8 +76,7 @@ model Availability {
 model ShiftTemplate {
   id          String       @id @default(cuid())
   storeId     String
-  role        String
-  workTypeId  String?
+  workTypeId  String
   days        Json
   startTime   DateTime     @db.Time(0)
   endTime     DateTime     @db.Time(0)
@@ -85,7 +84,7 @@ model ShiftTemplate {
   updatedAt   DateTime     @updatedAt
   assignments Assignment[]
   store       Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  workType    WorkType?    @relation(fields: [workTypeId], references: [id])
+  workType    WorkType     @relation(fields: [workTypeId], references: [id])
 }
 
 model Schedule {
@@ -108,7 +107,7 @@ model Assignment {
   day              Weekday
   startTime        DateTime       @db.Time(0)
   endTime          DateTime       @db.Time(0)
-  role             String
+  workTypeId       String
   employeeId       String?
   sourceTemplateId String?
   locked           Boolean        @default(false)
@@ -117,20 +116,22 @@ model Assignment {
   employee         Employee?      @relation(fields: [employeeId], references: [id])
   schedule         Schedule       @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
   sourceTemplate   ShiftTemplate? @relation(fields: [sourceTemplateId], references: [id])
+  workType         WorkType       @relation(fields: [workTypeId], references: [id])
 
   @@index([scheduleId, day, startTime])
 }
 
 model WorkType {
-  id        String             @id @default(cuid())
-  storeId   String
-  name      String
-  color     String?            @default("#0f172a")
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  employees EmployeeWorkType[]
-  shifts    ShiftTemplate[]
-  store     Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  id          String             @id @default(cuid())
+  storeId     String
+  name        String
+  color       String?            @default("#0f172a")
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  employees   EmployeeWorkType[]
+  shifts      ShiftTemplate[]
+  assignments Assignment[]
+  store       Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, name])
 }

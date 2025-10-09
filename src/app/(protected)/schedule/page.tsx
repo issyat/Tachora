@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { ErrorModal } from "@/components/ui/error-modal";
 
@@ -74,7 +74,7 @@ function deriveHourMarks(startMin: number, endMin: number) {
 function toSelection(day: DayKey, block: LaidBlock): AssignmentSelection {
   return {
     day,
-    role: block.role,
+    workType: block.workType || block.assignment?.workType || { id: 'unknown', name: block.role, color: '#6b7280' },
     startMin: block.startMin,
     endMin: block.endMin,
     templateId: block.templateId ?? block.assignment?.sourceTemplate?.id ?? null,
@@ -101,9 +101,9 @@ export default function SchedulePage() {
     setAssignments,
   } = useScheduleData();
 
-  const { hours: crossStoreMinutes } = useEmployeeHours(assignments, { 
+  const { hours: crossStoreMinutes } = useEmployeeHours(assignments, {
     storeId: currentStore?.id,
-    weekId: schedule?.weekId 
+    weekId: schedule?.weekId
   });
   const snapshots = useMemo(() => buildEmployeeSnapshots(assignments), [assignments]);
 
@@ -135,6 +135,7 @@ export default function SchedulePage() {
   const [drawerSelection, setDrawerSelection] = useState<AssignmentSelection | null>(null);
   const [drawerError, setDrawerError] = useState<{ title: string; message: string; suggestion?: string } | null>(null);
   const [assignmentError, setAssignmentError] = useState<{ title: string; message: string; suggestion?: string } | null>(null);
+  const [operationInProgress, setOperationInProgress] = useState(false);
 
 
 
@@ -171,24 +172,22 @@ export default function SchedulePage() {
         }
       };
     }
-    
-    // Check if employee can work the required role (fix case-sensitive matching)
-    const employeeWorkTypeNames = employee.roles.map(r => r.name.toLowerCase().trim());
-    const requiredRole = selection.role.toLowerCase().trim();
-    
 
-    
-    if (!employeeWorkTypeNames.includes(requiredRole)) {
+    // Check if employee can work the required work type
+    const employeeWorkTypeNames = employee.roles.map(r => r.name.toLowerCase().trim());
+    const requiredWorkType = selection.workType.name.toLowerCase().trim();
+
+    if (!employeeWorkTypeNames.includes(requiredWorkType)) {
       return {
         isValid: false,
         error: {
-          title: "Work Type Mismatch", 
-          message: `${employee.name} cannot work as "${selection.role}". They can work as: ${employee.roles.map(r => r.name).join(', ')}`,
+          title: "Work Type Mismatch",
+          message: `${employee.name} cannot work as "${selection.workType.name}". They can work as: ${employee.roles.map(r => r.name).join(', ')}`,
           suggestion: "Either assign a different employee with the correct work type, or update this employee's work types in the Employees tab."
         }
       };
     }
-    
+
     // Check availability for the day
     const dayAvailability = employee.availability?.find(a => a.day === selection.day);
     if (dayAvailability?.isOff) {
@@ -201,226 +200,202 @@ export default function SchedulePage() {
         }
       };
     }
-    
+
     // Check time availability overlap
     if (dayAvailability && !dayAvailability.isOff) {
       const shiftStart = timeToMinutes(minutesToTime(selection.startMin));
       const shiftEnd = timeToMinutes(minutesToTime(selection.endMin));
       const availStart = timeToMinutes(dayAvailability.startTime);
       const availEnd = timeToMinutes(dayAvailability.endTime);
-      
+
       // Check if shift times overlap with availability
       if (shiftStart < availStart || shiftEnd > availEnd) {
         return {
           isValid: false,
           error: {
             title: "Time Conflict",
-            message: `${employee.name} is only available from ${dayAvailability.startTime} to ${dayAvailability.endTime}, but the shift is from ${minutesToTime(selection.startMin)} to ${minutesToTime(selection.endMin)}.`,
+            message: `${employee.name} is only available from ${dayAvailability.startTime} to ${dayAvailability.endTime}, but the ${selection.workType.name} shift is from ${minutesToTime(selection.startMin)} to ${minutesToTime(selection.endMin)}.`,
             suggestion: "Either choose a different employee, adjust the shift times, or update this employee's availability in the Employees tab."
           }
         };
       }
     }
-    
+
     return { isValid: true };
   };
 
-  const handleAssign = async (employee: Employee, selection: AssignmentSelection) => {
-    if (!currentStore?.id) {
+  const handleAssign = useCallback(async (employee: Employee, selection: AssignmentSelection) => {
+    if (!currentStore?.id || loading || operationInProgress) {
       return;
     }
 
-    // Validate assignment before any UI updates
+    setOperationInProgress(true);
+
+    // Client-side validation first
     const validation = validateAssignment(employee, selection);
     if (!validation.isValid && validation.error) {
       setAssignmentError(validation.error);
+      setOperationInProgress(false);
       return;
     }
 
-    // Clear errors and close drawer only after validation passes
+    // Clear UI state immediately
     setDrawerError(null);
     setAssignmentError(null);
     setDrawerSelection(null);
 
-    
-    const originalAssignments = assignments;
-    let optimisticAssignment: Assignment;
+    // Create optimistic assignment
+    const tempId = `temp-${Date.now()}-${employee.id}-${Math.random()}`;
+    const optimisticAssignment: Assignment = {
+      id: selection.assignment?.id || tempId,
+      day: selection.day,
+      workType: selection.workType,
+      startTime: minutesToTime(selection.startMin),
+      endTime: minutesToTime(selection.endMin),
+      locked: false,
+      employee: {
+        id: employee.id,
+        name: employee.name,
+        color: employee.color,
+        storeName: employee.storeName,
+      },
+      sourceTemplate: selection.templateId ? {
+        id: selection.templateId,
+        workTypeId: selection.workType.id
+      } : undefined,
+    };
 
-    try {
+    // Apply optimistic update immediately
+    setAssignments(prev => {
       if (selection.assignment) {
-        // Optimistic update for reassignment - update existing assignment instantly
-        optimisticAssignment = {
-          ...selection.assignment,
-          employee: {
-            id: employee.id,
-            name: employee.name,
-            color: employee.color,
-            storeName: employee.storeName,
-          },
-        };
-        setAssignments(prev => prev.map(a => a.id === selection.assignment!.id ? optimisticAssignment : a));
-
-        // Background API call for reassignment
-        fetch('/api/schedule/assignments/unassign', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            assignmentId: selection.assignment.id,
-            employeeId: employee.id,
-          }),
-        }).catch((err: any) => {
-          console.error('Reassignment failed:', err);
-          // Revert on error
-          setAssignments(originalAssignments);
-          setAssignmentError({
-            title: "Reassignment Failed",
-            message: `Failed to reassign ${employee.name} to the new shift.`,
-            suggestion: "Please try the assignment again or check for conflicts."
-          });
-        });
-
+        // Reassignment - update existing
+        return prev.map(a => a.id === selection.assignment!.id ? optimisticAssignment : a);
       } else {
-        // Optimistic update for new assignment - add instantly
-        optimisticAssignment = {
-          id: `temp-${Date.now()}-${employee.id}`, // Unique temporary ID
-          day: selection.day,
-          role: selection.role,
-          startTime: minutesToTime(selection.startMin),
-          endTime: minutesToTime(selection.endMin),
-          locked: false,
-          employee: {
-            id: employee.id,
-            name: employee.name,
-            color: employee.color,
-            storeName: employee.storeName,
-          },
-          sourceTemplate: selection.templateId ? { id: selection.templateId, role: selection.role } : undefined,
-        };
-        setAssignments(prev => [...prev, optimisticAssignment]);
+        // New assignment - add to list
+        return [...prev, optimisticAssignment];
+      }
+    });
 
-        // Background API call for new assignment
-        const templateExists = selection.templateId && templates.some(t => t.id === selection.templateId);
-        const payload = {
-          storeId: currentStore.id,
-          day: selection.day,
-          role: selection.role,
-          startTime: minutesToTime(selection.startMin),
-          endTime: minutesToTime(selection.endMin),
-          employeeId: employee.id,
-          sourceTemplateId: templateExists ? selection.templateId : null,
-          weekId: schedule?.weekId,
-        };
+    // Background API call
+    try {
+      const payload = {
+        storeId: currentStore.id,
+        day: selection.day,
+        workTypeId: selection.workType.id,
+        startTime: minutesToTime(selection.startMin),
+        endTime: minutesToTime(selection.endMin),
+        employeeId: employee.id,
+        sourceTemplateId: selection.templateId || null,
+        weekId: schedule?.weekId,
+      };
 
-        fetch('/api/schedule/assignments/fast', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        })
-        .then(async response => {
-          if (!response.ok) {
-            const data = await response.json().catch(() => ({}));
-            const serverErrors = Array.isArray((data as any).errors)
-              ? (data as any).errors.map((err: any) => err.message ?? String(err))
-              : [];
-            const message = serverErrors.length > 0
-              ? `Cannot assign ${employee.name}: ${serverErrors.join(', ')}`
-              : (data as any).error || 'Failed to create assignment';
-            
-            // Revert optimistic update and show error modal for validation issues
-            setAssignments(originalAssignments);
-            
-            // Check if this is a structured API error response
-            if (data.code === 'WORK_TYPE_MISMATCH' || data.code === 'ROLE_MISMATCH') {
-              setAssignmentError({
-                title: data.error || "Work Type Mismatch",
-                message: data.details || `${employee.name} cannot be assigned to this shift due to work type restrictions.`,
-                suggestion: data.suggestion || "Please check the employee's work types in the Employees tab."
-              });
-            } else {
-              // Fallback for other validation errors
-              const isWorkTypeMismatch = serverErrors.some((err: string) => {
-                const lowerErr = err.toLowerCase();
-                return lowerErr.includes('work type') || 
-                       lowerErr.includes('role') ||
-                       lowerErr.includes('qualification') ||
-                       lowerErr.includes('not qualified') ||
-                       lowerErr.includes('mismatch') ||
-                       lowerErr.includes('incompatible');
-              });
-              
-              if (isWorkTypeMismatch) {
-                setAssignmentError({
-                  title: "Work Type Mismatch",
-                  message: `${employee.name} cannot be assigned to this shift because their work types don't match the required role.`,
-                  suggestion: "Either assign a different employee with the correct work type, or update the employee's work types in the Employees tab."
-                });
-              } else {
-                setAssignmentError({
-                  title: "Assignment Failed",
-                  message: serverErrors.length > 0 
-                    ? `Cannot assign ${employee.name}: ${serverErrors.join(', ')}`
-                    : `Cannot assign ${employee.name} to this shift.`,
-                  suggestion: "Please check the shift requirements and employee availability, then try again."
-                });
-              }
-            }
-            return;
+      const response = await fetch('/api/schedule/assignments/fast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+
+        // Revert optimistic update
+        setAssignments(prev => {
+          if (selection.assignment) {
+            // Restore original assignment
+            return prev.map(a => a.id === selection.assignment!.id ? selection.assignment! : a);
+          } else {
+            // Remove temporary assignment
+            return prev.filter(a => a.id !== tempId);
           }
-          
-          const realAssignment = await response.json();
-          
-          // Replace temporary assignment with real one
-          setAssignments(prev => prev.map(a => 
-            a.id === optimisticAssignment.id ? realAssignment.assignment || realAssignment : a
-          ));
-        })
-        .catch((err: any) => {
-          console.error('Assignment failed:', err);
-          // Revert on error
-          setAssignments(originalAssignments);
-          setAssignmentError({
-            title: "Assignment Failed",
-            message: err.message || `Failed to assign ${employee.name} due to a network error.`,
-            suggestion: "Please check your connection and try again."
-          });
         });
+
+        // Show error
+        setAssignmentError({
+          title: "Assignment Failed",
+          message: data.details || data.error || `Cannot assign ${employee.name} to this shift.`,
+          suggestion: data.suggestion || "Please check the employee's work types and availability."
+        });
+        return;
       }
 
-    } catch (err: any) {
-      console.error('Assignment error:', err);
-      setAssignments(originalAssignments);
-      setAssignmentError({
-        title: "Assignment Failed",
-        message: "Assignment failed due to an unexpected error.",
-        suggestion: "Please try again or refresh the page."
-      });
-    }
-  };
+      const result = await response.json();
 
-  const handleUnassign = async (assignment: Assignment) => {
-    // Immediate UI updates for instant feedback
+      // Replace temporary assignment with real one
+      if (!selection.assignment && result.assignment) {
+        setAssignments(prev => prev.map(a =>
+          a.id === tempId ? result.assignment : a
+        ));
+      }
+
+      setOperationInProgress(false);
+
+    } catch (error) {
+      console.error('Assignment failed:', error);
+
+      // Revert optimistic update
+      setAssignments(prev => {
+        if (selection.assignment) {
+          return prev.map(a => a.id === selection.assignment!.id ? selection.assignment! : a);
+        } else {
+          return prev.filter(a => a.id !== tempId);
+        }
+      });
+
+      setAssignmentError({
+        title: "Network Error",
+        message: "Failed to save assignment due to connection issues.",
+        suggestion: "Please check your internet connection and try again."
+      });
+    } finally {
+      setOperationInProgress(false);
+    }
+  }, [currentStore?.id, loading, schedule?.weekId, validateAssignment, operationInProgress]);
+
+  const handleUnassign = useCallback(async (assignment: Assignment) => {
+    // Prevent double-clicks and concurrent operations
+    if (loading || operationInProgress) {
+      return;
+    }
+
+    setOperationInProgress(true);
+
+    // Clear UI state immediately
     setDrawerError(null);
     setDrawerSelection(null);
 
-    
+    // Store original state for potential revert
     const originalAssignments = assignments;
-    // Remove the assignment completely from the UI
+
+    // Optimistic update - remove assignment immediately
     setAssignments(prev => prev.filter(a => a.id !== assignment.id));
-    
-    // Background API call
-    fetch(`/api/schedule/assignments/unassign?assignmentId=${assignment.id}`, {
-      method: 'DELETE',
-    }).catch((err: any) => {
-      console.error('Unassign failed:', err);
-      // Revert on error - restore the assignment
-      setAssignments(originalAssignments);
-      setAssignmentError({
-        title: "Delete Failed",
-        message: "Failed to delete the shift assignment.",
-        suggestion: "Please try again or refresh the page."
+
+    try {
+      const response = await fetch(`/api/schedule/assignments/unassign?assignmentId=${assignment.id}`, {
+        method: 'DELETE',
       });
-    });
-  };
+
+      if (!response.ok) {
+        throw new Error(`Unassign failed: ${response.status}`);
+      }
+
+      // Success - assignment already removed from UI
+      setOperationInProgress(false);
+
+    } catch (error) {
+      console.error('Unassign failed:', error);
+
+      // Revert optimistic update
+      setAssignments(originalAssignments);
+
+      setAssignmentError({
+        title: "Unassign Failed",
+        message: "Failed to remove the shift assignment.",
+        suggestion: "Please check your connection and try again."
+      });
+    } finally {
+      setOperationInProgress(false);
+    }
+  }, [loading, assignments, operationInProgress]);
 
   const handleDropEmployee = ({ day, block, employeeId }: { day: DayKey; block: LaidBlock; employeeId: string }) => {
     const employee = employees.find((candidate) => candidate.id === employeeId);
@@ -481,7 +456,7 @@ export default function SchedulePage() {
 
       <ErrorModal
         open={!!error}
-        onClose={() => {}} // Schedule errors are typically from data loading, not user actions
+        onClose={() => { }} // Schedule errors are typically from data loading, not user actions
         title="Schedule Loading Error"
         message={error || "Failed to load schedule data"}
         suggestion="Please refresh the page or check your internet connection."

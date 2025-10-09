@@ -369,7 +369,7 @@ export default function ShiftsPage() {
                             />
                           )}
                           <span className="truncate font-medium text-slate-900">
-                            {t.role || workType?.name || "(no role)"}
+                            {t.workType?.name || workType?.name || "(no work type)"}
                           </span>
                         </div>
                         <span className="truncate text-sm text-slate-500">{t.startTime} – {t.endTime}</span>

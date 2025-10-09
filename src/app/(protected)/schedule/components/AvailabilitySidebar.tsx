@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { useMemo } from "react";
 
 import { formatMinutesAsHours } from "../utils/time";
 import { DAY_TO_INDEX } from "../utils/constants";
@@ -15,7 +15,7 @@ interface AvailabilitySidebarProps {
   onSelectEmployee: (employee: Employee) => void;
 }
 
-export const AvailabilitySidebar = memo(function AvailabilitySidebar({
+export function AvailabilitySidebar({
   day,
   storeId,
   employees,
@@ -146,4 +146,4 @@ export const AvailabilitySidebar = memo(function AvailabilitySidebar({
       </div>
     </aside>
   );
-});
+}

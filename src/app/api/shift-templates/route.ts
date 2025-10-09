@@ -147,14 +147,14 @@ export async function POST(request: Request) {
       const shiftEndMinutes = endHour * 60 + endMin;
 
       if (shiftStartMinutes < storeOpenMinutes) {
-        return NextResponse.json({ 
-          error: `Shift cannot start before store opens. Store opens at ${String(Math.floor(storeOpenMinutes / 60)).padStart(2, '0')}:${String(storeOpenMinutes % 60).padStart(2, '0')}` 
+        return NextResponse.json({
+          error: `Shift cannot start before store opens. Store opens at ${String(Math.floor(storeOpenMinutes / 60)).padStart(2, '0')}:${String(storeOpenMinutes % 60).padStart(2, '0')}`
         }, { status: 400 });
       }
 
       if (shiftEndMinutes > storeCloseMinutes) {
-        return NextResponse.json({ 
-          error: `Shift cannot end after store closes. Store closes at ${String(Math.floor(storeCloseMinutes / 60)).padStart(2, '0')}:${String(storeCloseMinutes % 60).padStart(2, '0')}` 
+        return NextResponse.json({
+          error: `Shift cannot end after store closes. Store closes at ${String(Math.floor(storeCloseMinutes / 60)).padStart(2, '0')}:${String(storeCloseMinutes % 60).padStart(2, '0')}`
         }, { status: 400 });
       }
     }
@@ -173,11 +173,13 @@ export async function POST(request: Request) {
         const created = await tx.shiftTemplate.create({
           data: {
             storeId,
-            role: workType.name,
             workTypeId: workType.id,
             days: template.days,
             startTime: timeStringToDate(template.startTime),
             endTime: timeStringToDate(template.endTime),
+          },
+          include: {
+            workType: true,
           },
         });
         createdTemplates.push(created);
