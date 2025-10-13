@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ErrorModal } from "@/components/ui/error-modal";
 
@@ -16,6 +16,7 @@ import { buildLayouts, type LaidBlock } from "./utils/layout";
 import { DAY_ORDER, MIN_WINDOW_MINUTES } from "./utils/constants";
 import { minutesToTime, timeToMinutes } from "./utils/time";
 import type { Assignment, DayKey, Employee, Template } from "./types";
+import { useScheduleFacts } from "./hooks/useScheduleFacts";
 
 const DEFAULT_OPENING_TIME = "09:00";
 const DEFAULT_CLOSING_TIME = "22:00";
@@ -82,10 +83,6 @@ function toSelection(day: DayKey, block: LaidBlock): AssignmentSelection {
   };
 }
 
-function formatServerErrors(prefix: string, errors: string[]) {
-  return [prefix, ...errors.map((msg) => `- ${msg}`)].join("\n");
-}
-
 export default function SchedulePage() {
   const {
     stores,
@@ -106,6 +103,21 @@ export default function SchedulePage() {
     weekId: schedule?.weekId
   });
   const snapshots = useMemo(() => buildEmployeeSnapshots(assignments), [assignments]);
+
+  const {
+    facts: scheduleFacts,
+    loading: scheduleFactsLoading,
+    error: scheduleFactsError,
+  } = useScheduleFacts(assignments, {
+    storeId: currentStore?.id,
+    weekId: schedule?.weekId,
+  });
+
+  useEffect(() => {
+    if (scheduleFactsError) {
+      console.warn("Failed to refresh schedule facts", scheduleFactsError);
+    }
+  }, [scheduleFactsError]);
 
   const templateWorkTypes = useMemo(() => {
     const index = new Map<string, string | null>();
@@ -155,12 +167,12 @@ export default function SchedulePage() {
     [assignments, templates, windowEndMin, windowStartMin],
   );
 
-  const timeToMinutes = (timeStr: string): number => {
-    const [hours, minutes] = timeStr.split(':').map(Number);
+  const parseTimeToMinutes = useCallback((timeStr: string): number => {
+    const [hours, minutes] = timeStr.split(":").map(Number);
     return hours * 60 + minutes;
-  };
+  }, []);
 
-  const validateAssignment = (employee: Employee, selection: AssignmentSelection): { isValid: boolean; error?: { title: string; message: string; suggestion: string } } => {
+  const validateAssignment = useCallback((employee: Employee, selection: AssignmentSelection): { isValid: boolean; error?: { title: string; message: string; suggestion: string } } => {
     // Check if employee has any work types assigned
     if (!employee.roles || employee.roles.length === 0) {
       return {
@@ -203,10 +215,10 @@ export default function SchedulePage() {
 
     // Check time availability overlap
     if (dayAvailability && !dayAvailability.isOff) {
-      const shiftStart = timeToMinutes(minutesToTime(selection.startMin));
-      const shiftEnd = timeToMinutes(minutesToTime(selection.endMin));
-      const availStart = timeToMinutes(dayAvailability.startTime);
-      const availEnd = timeToMinutes(dayAvailability.endTime);
+      const shiftStart = parseTimeToMinutes(minutesToTime(selection.startMin));
+      const shiftEnd = parseTimeToMinutes(minutesToTime(selection.endMin));
+      const availStart = parseTimeToMinutes(dayAvailability.startTime);
+      const availEnd = parseTimeToMinutes(dayAvailability.endTime);
 
       // Check if shift times overlap with availability
       if (shiftStart < availStart || shiftEnd > availEnd) {
@@ -222,7 +234,7 @@ export default function SchedulePage() {
     }
 
     return { isValid: true };
-  };
+  }, [parseTimeToMinutes]);
 
   const handleAssign = useCallback(async (employee: Employee, selection: AssignmentSelection) => {
     if (!currentStore?.id || loading || operationInProgress) {
@@ -349,7 +361,18 @@ export default function SchedulePage() {
     } finally {
       setOperationInProgress(false);
     }
-  }, [currentStore?.id, loading, schedule?.weekId, validateAssignment, operationInProgress]);
+  }, [
+    currentStore?.id,
+    loading,
+    schedule?.weekId,
+    validateAssignment,
+    operationInProgress,
+    setAssignments,
+    setAssignmentError,
+    setDrawerError,
+    setDrawerSelection,
+    setOperationInProgress,
+  ]);
 
   const handleUnassign = useCallback(async (assignment: Assignment) => {
     // Prevent double-clicks and concurrent operations
@@ -395,7 +418,16 @@ export default function SchedulePage() {
     } finally {
       setOperationInProgress(false);
     }
-  }, [loading, assignments, operationInProgress]);
+  }, [
+    loading,
+    assignments,
+    operationInProgress,
+    setAssignments,
+    setDrawerError,
+    setDrawerSelection,
+    setAssignmentError,
+    setOperationInProgress,
+  ]);
 
   const handleDropEmployee = ({ day, block, employeeId }: { day: DayKey; block: LaidBlock; employeeId: string }) => {
     const employee = employees.find((candidate) => candidate.id === employeeId);
@@ -505,7 +537,13 @@ export default function SchedulePage() {
 
         {/* Right: Chat Assistant */}
         <div className="h-full">
-          <ScheduleChatAssistant />
+          <ScheduleChatAssistant
+            storeId={currentStore?.id}
+            weekId={schedule?.weekId}
+            assignments={assignments}
+            facts={scheduleFacts}
+            factsLoading={scheduleFactsLoading}
+          />
         </div>
       </div>
 
@@ -521,6 +559,7 @@ export default function SchedulePage() {
         error={drawerError}
         setError={setDrawerError}
       />
+
 
 
     </div>

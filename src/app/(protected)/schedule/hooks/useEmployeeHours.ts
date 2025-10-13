@@ -63,25 +63,34 @@ export function useEmployeeHours(assignments: Assignment[], options: UseEmployee
     }
   }, [storeId, weekId]);
 
-  // Only fetch server hours once on mount, then rely on local calculations
+  // Fetch server hours when store or week changes
   useEffect(() => {
     let mounted = true;
     fetchServerHours().then(() => {
       if (mounted) {
-        // After initial fetch, we rely purely on local calculations for speed
         setLoading(false);
       }
     });
     return () => { mounted = false; };
-  }, [storeId]); // Only depend on storeId, not weekId for better performance
+  }, [fetchServerHours]); // Depend on fetchServerHours which includes storeId and weekId
 
-  // Use local hours for instant updates, with server hours as fallback for employees without current assignments
+  // Merge server hours (cross-store totals) with local hours (instant feedback)
   const mergedHours = useMemo(() => {
+    // Start with server hours which include ALL stores
     const merged = { ...serverHours };
     
-    // Override with local hours for instant updates
-    Object.entries(localHours).forEach(([employeeId, minutes]) => {
-      merged[employeeId] = minutes;
+    // Update with local hours for instant UI feedback
+    // But ONLY for employees that have local assignments
+    // Don't override server hours for cross-store employees with 0 local assignments!
+    Object.entries(localHours).forEach(([employeeId, localMinutes]) => {
+      if (localMinutes > 0) {
+        // If there are local assignments, show those for instant feedback
+        merged[employeeId] = localMinutes;
+      } else if (!(employeeId in serverHours)) {
+        // Only set to 0 if server also doesn't have data
+        merged[employeeId] = 0;
+      }
+      // If localMinutes is 0 but server has hours, keep server hours (cross-store)
     });
     
     return merged;

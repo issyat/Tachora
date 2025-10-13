@@ -15,9 +15,6 @@ import type {
   ScheduleState,
 } from '../src/generated/prisma';
 
-import type {
-  DaysConfig,
-} from '../src/types';
 
 const prisma = new PrismaClient();
 
@@ -31,15 +28,23 @@ const SEED_CONFIG = {
     onboardingStep: 'DONE' as OnboardingStep,
   },
   
-  // Store configurations - Single medium retail store
+  // Store configurations - Two medium retail stores
   stores: [
     {
-      name: 'Medium Retail Store',
+      name: 'Medium Retail Store - Grand Place',
       city: 'Brussels',
       country: 'BE',
-      address: '123 Main Street, 1000 Brussels, Belgium',
+      address: '123 Grand Place, 1000 Brussels, Belgium',
       openingTime: '08:00',
       closingTime: '20:00',
+    },
+    {
+      name: 'Medium Retail Store - Louise',
+      city: 'Brussels',
+      country: 'BE',
+      address: '45 Avenue Louise, 1050 Brussels, Belgium',
+      openingTime: '09:00',
+      closingTime: '21:00',
     },
   ],
   
@@ -176,11 +181,134 @@ const SEED_CONFIG = {
         },
       },
     ],
+    store2: [
+      {
+        name: 'Grace Lee',
+        email: 'grace@mediumretail.com',
+        phone: '+32 2 789 0123',
+        label: 'Store Lead & Supervisor',
+        color: '#3b82f6',
+        contractType: 'FULL_TIME' as ContractType,
+        weeklyMinutesTarget: 2400,
+        canWorkAcrossStores: true,
+        workTypes: ['Shift Supervisor', 'Customer Service'],
+        availability: {
+          MON: { isOff: false, startTime: '08:30', endTime: '18:30' },
+          TUE: { isOff: false, startTime: '08:30', endTime: '18:30' },
+          WED: { isOff: false, startTime: '08:30', endTime: '18:30' },
+          THU: { isOff: false, startTime: '08:30', endTime: '18:30' },
+          FRI: { isOff: false, startTime: '08:30', endTime: '18:30' },
+          SAT: { isOff: false, startTime: '10:00', endTime: '18:00' },
+          SUN: { isOff: true, startTime: null, endTime: null },
+        },
+      },
+      {
+        name: 'Hugo Martin',
+        email: 'hugo@mediumretail.com',
+        phone: '+32 2 890 1234',
+        label: 'Cashier Specialist',
+        color: '#10b981',
+        contractType: 'FULL_TIME' as ContractType,
+        weeklyMinutesTarget: 2160,
+        canWorkAcrossStores: false,
+        workTypes: ['Cashier'],
+        availability: {
+          MON: { isOff: false, startTime: '09:00', endTime: '17:00' },
+          TUE: { isOff: false, startTime: '11:00', endTime: '19:00' },
+          WED: { isOff: false, startTime: '09:00', endTime: '17:00' },
+          THU: { isOff: false, startTime: '11:00', endTime: '19:00' },
+          FRI: { isOff: false, startTime: '09:00', endTime: '17:00' },
+          SAT: { isOff: false, startTime: '12:00', endTime: '20:00' },
+          SUN: { isOff: false, startTime: '12:00', endTime: '18:00' },
+        },
+      },
+      {
+        name: 'Isabella Rossi',
+        email: 'isabella@mediumretail.com',
+        phone: '+32 2 901 2345',
+        label: 'Luxury Sales Associate',
+        color: '#f59e0b',
+        contractType: 'FULL_TIME' as ContractType,
+        weeklyMinutesTarget: 2400,
+        canWorkAcrossStores: false,
+        workTypes: ['Sales Associate', 'Customer Service'],
+        availability: {
+          MON: { isOff: false, startTime: '10:00', endTime: '20:00' },
+          TUE: { isOff: false, startTime: '10:00', endTime: '20:00' },
+          WED: { isOff: false, startTime: '12:00', endTime: '21:00' },
+          THU: { isOff: false, startTime: '12:00', endTime: '21:00' },
+          FRI: { isOff: false, startTime: '10:00', endTime: '20:00' },
+          SAT: { isOff: false, startTime: '09:00', endTime: '17:00' },
+          SUN: { isOff: false, startTime: '11:00', endTime: '17:00' },
+        },
+      },
+      {
+        name: 'Jasper Novak',
+        email: 'jasper@mediumretail.com',
+        phone: '+32 2 012 3456',
+        label: 'Visual Merchandiser',
+        color: '#8b5cf6',
+        contractType: 'PART_TIME' as ContractType,
+        weeklyMinutesTarget: 1200,
+        canWorkAcrossStores: true,
+        workTypes: ['Sales Associate'],
+        availability: {
+          MON: { isOff: false, startTime: '13:00', endTime: '21:00' },
+          TUE: { isOff: false, startTime: '13:00', endTime: '21:00' },
+          WED: { isOff: true, startTime: null, endTime: null },
+          THU: { isOff: false, startTime: '13:00', endTime: '21:00' },
+          FRI: { isOff: false, startTime: '13:00', endTime: '21:00' },
+          SAT: { isOff: false, startTime: '11:00', endTime: '19:00' },
+          SUN: { isOff: true, startTime: null, endTime: null },
+        },
+      },
+      {
+        name: 'Klara Schmidt',
+        email: 'klara@mediumretail.com',
+        phone: '+32 2 123 4098',
+        label: 'Stock & Logistics',
+        color: '#06b6d4',
+        contractType: 'PART_TIME' as ContractType,
+        weeklyMinutesTarget: 1020,
+        canWorkAcrossStores: false,
+        workTypes: ['Stock Clerk'],
+        availability: {
+          MON: { isOff: false, startTime: '07:00', endTime: '13:00' },
+          TUE: { isOff: false, startTime: '07:00', endTime: '13:00' },
+          WED: { isOff: false, startTime: '07:00', endTime: '13:00' },
+          THU: { isOff: true, startTime: null, endTime: null },
+          FRI: { isOff: false, startTime: '07:00', endTime: '13:00' },
+          SAT: { isOff: false, startTime: '08:00', endTime: '14:00' },
+          SUN: { isOff: true, startTime: null, endTime: null },
+        },
+      },
+      {
+        name: 'Liam O’Connor',
+        email: 'liam@mediumretail.com',
+        phone: '+32 2 234 5098',
+        label: 'Weekend Support',
+        color: '#ef4444',
+        contractType: 'STUDENT' as ContractType,
+        weeklyMinutesTarget: 720,
+        canWorkAcrossStores: false,
+        workTypes: ['Customer Service'],
+        availability: {
+          MON: { isOff: true, startTime: null, endTime: null },
+          TUE: { isOff: true, startTime: null, endTime: null },
+          WED: { isOff: false, startTime: '16:00', endTime: '20:00' },
+          THU: { isOff: true, startTime: null, endTime: null },
+          FRI: { isOff: false, startTime: '17:00', endTime: '21:00' },
+          SAT: { isOff: false, startTime: '10:00', endTime: '18:00' },
+          SUN: { isOff: false, startTime: '12:00', endTime: '18:00' },
+        },
+      },
+    ],
   },
 };
 
 // Utility functions
 const WEEKDAY_ORDER: Weekday[] = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+type DaysConfig = Record<Weekday, boolean>;
 
 function createDaysConfig(days: Weekday[]): DaysConfig {
   return WEEKDAY_ORDER.reduce((config, day) => {
@@ -319,55 +447,59 @@ async function seedEmployees(stores: any[], workTypesByStore: Record<string, any
   console.log('🔄 Seeding employees...');
   
   const employeesByStore: Record<string, any[]> = {};
-  
-  // Seed employees for store 1
-  const store1 = stores[0];
-  const store1WorkTypes = workTypesByStore[store1.id];
-  const employees1 = [];
-  
-  for (const empConfig of SEED_CONFIG.employees.store1) {
-    // Find work type IDs
-    const roleIds = empConfig.workTypes.map(typeName => {
-      const workType = store1WorkTypes.find(wt => wt.name === typeName);
-      if (!workType) throw new Error(`Work type not found: ${typeName}`);
-      return workType.id;
-    });
-    
-    const employee = await prisma.employee.create({
-      data: {
-        storeId: store1.id,
-        name: empConfig.name,
-        email: empConfig.email,
-        phone: empConfig.phone,
-        color: empConfig.color,
-        contractType: empConfig.contractType,
-        weeklyMinutesTarget: empConfig.weeklyMinutesTarget,
-        canWorkAcrossStores: empConfig.canWorkAcrossStores,
-        availability: {
-          create: WEEKDAY_ORDER.map(day => {
-            const avail = empConfig.availability[day];
-            return {
-              day,
-              isOff: avail.isOff,
-              startTime: avail.startTime ? timeStringToDate(avail.startTime) : null,
-              endTime: avail.endTime ? timeStringToDate(avail.endTime) : null,
-            };
-          }),
+
+  for (const [index, store] of stores.entries()) {
+    const storeWorkTypes = workTypesByStore[store.id];
+    const employees = [];
+    const storeKey = `store${index + 1}` as keyof typeof SEED_CONFIG.employees;
+    const employeeConfigs = SEED_CONFIG.employees[storeKey] ?? [];
+
+    if (!employeeConfigs.length) {
+      console.warn(`⚠️  No employee config found for ${store.name} (${storeKey})`);
+    }
+
+    for (const empConfig of employeeConfigs) {
+      // Find work type IDs
+      const roleIds = empConfig.workTypes.map(typeName => {
+        const workType = storeWorkTypes.find(wt => wt.name === typeName);
+        if (!workType) throw new Error(`Work type not found: ${typeName}`);
+        return workType.id;
+      });
+
+      const employee = await prisma.employee.create({
+        data: {
+          storeId: store.id,
+          name: empConfig.name,
+          email: empConfig.email,
+          phone: empConfig.phone,
+          color: empConfig.color,
+          contractType: empConfig.contractType,
+          weeklyMinutesTarget: empConfig.weeklyMinutesTarget,
+          canWorkAcrossStores: empConfig.canWorkAcrossStores,
+          availability: {
+            create: WEEKDAY_ORDER.map(day => {
+              const avail = empConfig.availability[day];
+              return {
+                day,
+                isOff: avail.isOff,
+                startTime: avail.startTime ? timeStringToDate(avail.startTime) : null,
+                endTime: avail.endTime ? timeStringToDate(avail.endTime) : null,
+              };
+            }),
+          },
+          roles: {
+            create: roleIds.map(workTypeId => ({ workTypeId })),
+          },
         },
-        roles: {
-          create: roleIds.map(workTypeId => ({ workTypeId })),
-        },
-      },
-    });
-    
-    employees1.push(employee);
+      });
+
+      employees.push(employee);
+    }
+
+    employeesByStore[store.id] = employees;
+    console.log(`✅ Employees created for ${store.name}: ${employees.length} employees`);
   }
-  
-  employeesByStore[store1.id] = employees1;
-  console.log(`✅ Employees created for ${store1.name}: ${employees1.length} employees`);
-  
-  // Only one store in this medium retail scenario
-  
+
   return employeesByStore;
 }
 

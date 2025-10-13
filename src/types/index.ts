@@ -4,11 +4,9 @@
  * This file provides a single import point for all types used throughout the application.
  */
 
-// Database types
-export * from './database';
-
 // API types  
 export * from './api';
+export * from './schedule-facts';
 
 // Import specific types for use in this file
 import type { QueryParams } from './api';
@@ -143,6 +141,15 @@ export type DeepPartial<T> = {
 export type {
   PrismaClient,
   Prisma,
+} from '@/generated/prisma';
+
+export type {
+  Availability,
+  Employee,
+  EmployeeWorkType,
+  ShiftTemplate,
+  Weekday,
+  WorkType,
 } from '@/generated/prisma';
 
 // Generic CRUD operations (using imported QueryParams)

@@ -1,5 +1,5 @@
 ﻿import { timeDateToString } from "@/lib/time";
-import { WEEKDAY_ORDER } from "@/types";
+import { WEEKDAY_ORDER } from "@/lib/schedule/constants";
 import type {
   Availability,
   Employee,
