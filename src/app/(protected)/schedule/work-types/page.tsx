@@ -94,7 +94,6 @@ export default function WorkTypesPage() {
 
   async function deleteWorkType(index: number) {
     const newItems = items.filter((_, i) => i !== index);
-    setItems(newItems);
     await saveWorkTypes(newItems);
   }
 
@@ -132,7 +131,7 @@ export default function WorkTypesPage() {
     await saveWorkTypes(newItems);
   }
 
-  async function saveWorkTypes(workTypesToSave: WorkType[]) {
+  async function saveWorkTypes(workTypesToSave: WorkType[], forceDelete: boolean = false) {
     if (!currentStore?.id) {
       setError({
         title: "Store Required",
@@ -151,8 +150,10 @@ export default function WorkTypesPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          storeId: currentStore.id, 
+          storeId: currentStore.id,
+          forceDelete, // Pass force delete flag
           workTypes: workTypesToSave.map(wt => ({
+            id: wt.id, // Include ID if it exists (for updates)
             name: wt.name.trim(),
             color: wt.color
           }))
@@ -160,6 +161,26 @@ export default function WorkTypesPage() {
       });
       
       const data = await response.json().catch(() => ({}));
+      
+      // Handle conflict (needs confirmation)
+      if (response.status === 409 && data.needsConfirmation) {
+        const details = data.details || {};
+        const confirmMessage = `${data.error}\n\nAre you sure you want to delete and remove all associated data?\n\n` +
+          `This will delete:\n` +
+          `• ${details.affectedShiftTemplates || 0} shift template(s)\n` +
+          `• ${details.affectedAssignments || 0} assignment(s)\n\n` +
+          `This action cannot be undone.`;
+        
+        if (confirm(confirmMessage)) {
+          // Retry with force delete
+          return await saveWorkTypes(workTypesToSave, true);
+        } else {
+          // User cancelled, revert to original items
+          fetchData(currentStore.id);
+          return;
+        }
+      }
+      
       if (!response.ok) {
         setError({
           title: "Save Failed",

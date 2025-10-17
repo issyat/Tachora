@@ -13,6 +13,7 @@ export interface Block {
   endMin: number;
   assignment?: Assignment;
   templateId?: string | null;
+  isPreview?: boolean; // Flag for preview templates
 }
 
 export interface LaidBlock extends Block {
@@ -159,6 +160,7 @@ export function buildLayouts(
           startMin: start,
           endMin: end,
           templateId: template.id,
+          isPreview: (template as any).isPreview, // Preserve preview flag from template
         });
       }
     });

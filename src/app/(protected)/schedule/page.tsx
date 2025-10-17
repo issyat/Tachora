@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ErrorModal } from "@/components/ui/error-modal";
+import { usePreview } from "@/hooks/use-preview";
 
 import { useScheduleData } from "./hooks/useScheduleData";
 import { useEmployeeHours } from "./hooks/useEmployeeHours";
@@ -148,6 +149,42 @@ export default function SchedulePage() {
   const [drawerError, setDrawerError] = useState<{ title: string; message: string; suggestion?: string } | null>(null);
   const [assignmentError, setAssignmentError] = useState<{ title: string; message: string; suggestion?: string } | null>(null);
   const [operationInProgress, setOperationInProgress] = useState(false);
+  const [optimisticTemplates, setOptimisticTemplates] = useState<Template[]>([]);
+
+  // Preview state management (only enabled when store and schedule are loaded)
+  const {
+    preview,
+    visualization,
+    isLoading: previewLoading,
+    error: previewError,
+    fetchPreviewById,
+    applyPreview,
+    undoPreview,
+    discardPreview,
+  } = usePreview({
+    storeId: currentStore?.id ?? '',
+    weekId: schedule?.weekId ?? '',
+    snapshotVersion: schedule?.version?.toString() ?? '1', // Use actual schedule version
+    onApplySuccess: async () => {
+      // Wait for refresh to complete before UI updates
+      await refresh();
+      // Clear optimistic templates after real data loads
+      setOptimisticTemplates([]);
+    },
+    onUndoSuccess: async () => {
+      // Wait for refresh to complete before UI updates
+      await refresh();
+    },
+    onError: (err) => {
+      setAssignmentError({
+        title: 'Preview Error',
+        message: err.message || 'Failed to process preview',
+        suggestion: 'Please try again or discard the preview.'
+      });
+      // Clear optimistic templates on error
+      setOptimisticTemplates([]);
+    },
+  });
 
 
 
@@ -162,9 +199,151 @@ export default function SchedulePage() {
 
   const hours = useMemo(() => deriveHourMarks(windowStartMin, windowEndMin), [windowEndMin, windowStartMin]);
 
+  // Merge preview shift templates for calendar display
+  const templatesWithPreview = useMemo(() => {
+    // Start with real templates
+    let merged = [...templates];
+    
+    // Add optimistic templates (from applied previews waiting for refresh)
+    if (optimisticTemplates.length > 0) {
+      merged = [...merged, ...optimisticTemplates];
+    }
+
+    if (!preview || preview.status !== 'pending') {
+      return merged;
+    }
+
+    // Add new shift templates from preview
+    for (const diff of preview.diffs) {
+      if (diff.operation.type === 'add_shift') {
+        const op = diff.operation as any;
+        
+        // Find the work type from existing templates
+        let workType = templates.find(t => t.workType?.name === op.workTypeName)?.workType;
+        
+        // If not found in templates, create a placeholder work type
+        // (This happens when adding a shift for a newly created work type)
+        if (!workType) {
+          workType = {
+            id: `temp-worktype-${Date.now()}`,
+            name: op.workTypeName,
+            color: '#6366f1', // Default indigo color for new work types
+          };
+        }
+
+        // Create preview template
+        const previewTemplate = {
+          id: `preview-${Date.now()}`,
+          storeId: currentStore?.id || '',
+          days: {
+            MON: op.day === 'MON',
+            TUE: op.day === 'TUE',
+            WED: op.day === 'WED',
+            THU: op.day === 'THU',
+            FRI: op.day === 'FRI',
+            SAT: op.day === 'SAT',
+            SUN: op.day === 'SUN',
+          },
+          startTime: op.start,
+          endTime: op.end,
+          workTypeId: workType.id,
+          workType: workType,
+          capacity: op.capacity || 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          isPreview: true, // Mark as preview
+        };
+
+        merged.push(previewTemplate as any);
+      }
+    }
+
+    return merged;
+  }, [templates, optimisticTemplates, preview, currentStore?.id]);
+
+  // Merge preview changes into assignments for calendar display
+  const assignmentsWithPreview = useMemo(() => {
+    if (!preview || preview.status !== 'pending') {
+      return assignments;
+    }
+
+    // Start with existing assignments
+    const merged = [...assignments];
+    
+    // Apply each diff's "after" state
+    for (const diff of preview.diffs) {
+      if (diff.operation.type === 'assign_shift') {
+        const op = diff.operation as any;
+        
+        // Find the shift template to get timing info
+        const shiftId = op.shiftId;
+        const [templateId, day] = shiftId.split('-');
+        const template = templates.find(t => t.id === templateId);
+        let startTime = template?.startTime;
+        let endTime = template?.endTime;
+        let workTypeId = template?.workTypeId;
+        let workType = template?.workType;
+        let assignmentDay: DayKey | string | undefined = day;
+
+        if (!template) {
+          const existingAssignment = assignments.find((a) => a.id === shiftId);
+          if (existingAssignment) {
+            assignmentDay = existingAssignment.day;
+            startTime = existingAssignment.startTime;
+            endTime = existingAssignment.endTime;
+            workTypeId = existingAssignment.workType.id;
+            workType = existingAssignment.workType;
+          } else if (diff.after.assignments?.length) {
+            const after = diff.after.assignments[0];
+            assignmentDay = after.day;
+          }
+        }
+
+        if (!startTime || !endTime || !workTypeId || !workType) continue;
+
+        // Find the employee
+        const employee = employees.find(e => e.id === op.employeeId);
+        if (!employee) continue;
+        
+        // Create preview assignment with full structure
+        const previewAssignment = {
+          id: `preview-${op.shiftId}-${op.employeeId}`,
+          scheduleId: schedule?.id || '',
+          day: assignmentDay || day,
+          startTime,
+          endTime,
+          workTypeId,
+          employeeId: op.employeeId,
+          sourceTemplateId: templateId || shiftId,
+          locked: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          employee: {
+            id: employee.id,
+            name: employee.name,
+            color: employee.color,
+          },
+          workType,
+          isPreview: true, // Mark as preview
+        };
+        
+        merged.push(previewAssignment as any);
+      } else if (diff.operation.type === 'unassign_shift') {
+        // Remove assignment (mark as preview-removed)
+        const op = diff.operation as any;
+        const index = merged.findIndex(a => a.id === op.assignmentId);
+        if (index >= 0) {
+          merged[index] = { ...merged[index], isPreviewRemoved: true } as any;
+        }
+      }
+    }
+
+    return merged;
+  }, [assignments, preview, templates, employees, schedule]);
+
   const layouts = useMemo(
-    () => buildLayouts(templates, assignments, windowStartMin, windowEndMin),
-    [assignments, templates, windowEndMin, windowStartMin],
+    () => buildLayouts(templatesWithPreview, assignmentsWithPreview, windowStartMin, windowEndMin),
+    [assignmentsWithPreview, templatesWithPreview, windowEndMin, windowStartMin],
   );
 
   const parseTimeToMinutes = useCallback((timeStr: string): number => {
@@ -443,7 +622,212 @@ export default function SchedulePage() {
     void handleAssign(employee, selection);
   };
 
+  // Wrapper for applyPreview to add optimistic updates
+  const handleApplyPreview = useCallback(async () => {
+    if (!preview || !currentStore?.id) {
+      return applyPreview();
+    }
 
+    const previousAssignments = assignments;
+    const previousOptimisticTemplates = optimisticTemplates;
+
+    const cloneAssignment = (assignment: Assignment): Assignment => ({
+      ...assignment,
+      workType: { ...assignment.workType },
+      employee: assignment.employee ? { ...assignment.employee } : undefined,
+      sourceTemplate: assignment.sourceTemplate ? { ...assignment.sourceTemplate } : undefined,
+    });
+
+    let nextAssignments = assignments.map(cloneAssignment);
+    let assignmentsMutated = false;
+
+    const newTemplates: Template[] = [];
+
+    const ensureWorkType = (
+      template: Template,
+      existing?: Assignment
+    ): Assignment['workType'] => {
+      if (template.workType) {
+        return { ...template.workType };
+      }
+      if (existing?.workType) {
+        return { ...existing.workType };
+      }
+      return {
+        id: template.workTypeId ?? `worktype-${template.id}`,
+        name: existing?.workType?.name ?? 'Shift',
+        color: existing?.workType?.color ?? '#1f2937',
+      };
+    };
+
+    const buildEmployeeInfo = (employeeId: string) => {
+      const employee = employees.find((candidate) => candidate.id === employeeId);
+      if (!employee) {
+        return undefined;
+      }
+      return {
+        id: employee.id,
+        name: employee.name,
+        color: employee.color,
+        storeName: employee.storeName,
+      };
+    };
+
+    for (const diff of preview.diffs) {
+      const operation = diff.operation;
+
+      if (operation.type === 'add_shift') {
+        const op = operation as any;
+
+        let workType = templates.find((t) => t.workType?.name === op.workTypeName)?.workType;
+        if (!workType) {
+          workType = {
+            id: `temp-worktype-${Date.now()}`,
+            name: op.workTypeName,
+            color: '#6366f1',
+          };
+        }
+
+        const optimisticTemplate: Template = {
+          id: `optimistic-${Date.now()}-${Math.random()}`,
+          storeId: currentStore.id,
+          days: {
+            MON: op.day === 'MON',
+            TUE: op.day === 'TUE',
+            WED: op.day === 'WED',
+            THU: op.day === 'THU',
+            FRI: op.day === 'FRI',
+            SAT: op.day === 'SAT',
+            SUN: op.day === 'SUN',
+          },
+          startTime: op.start,
+          endTime: op.end,
+          workTypeId: workType.id,
+          workType,
+        };
+
+        newTemplates.push(optimisticTemplate);
+        continue;
+      }
+
+      if (operation.type === 'assign_shift') {
+        const op = operation as any;
+        const [templateId, day] = op.shiftId.split('-');
+        const template = templates.find((t) => t.id === templateId);
+        const employeeInfo = buildEmployeeInfo(op.employeeId);
+
+        if (!template || !employeeInfo || !day) {
+          continue;
+        }
+
+        const dayKey = day as DayKey;
+        const existingIndex = nextAssignments.findIndex(
+          (assignment) =>
+            assignment.sourceTemplate?.id === template.id && assignment.day === dayKey
+        );
+
+        const existingAssignment = existingIndex >= 0 ? nextAssignments[existingIndex] : undefined;
+        const workType = ensureWorkType(template, existingAssignment);
+
+        const updatedAssignment: Assignment = {
+          id:
+            existingAssignment?.id ??
+            `optimistic-${template.id}-${op.employeeId}-${Date.now()}`,
+          day: dayKey,
+          startTime: template.startTime,
+          endTime: template.endTime,
+          workType,
+          locked: existingAssignment?.locked ?? false,
+          employee: employeeInfo,
+          sourceTemplate: {
+            id: template.id,
+            workTypeId: template.workTypeId ?? workType.id,
+          },
+        };
+
+        if (existingIndex >= 0) {
+          nextAssignments[existingIndex] = updatedAssignment;
+        } else {
+          nextAssignments = [...nextAssignments, updatedAssignment];
+        }
+
+        assignmentsMutated = true;
+        continue;
+      }
+
+      if (operation.type === 'unassign_shift') {
+        const op = operation as any;
+        const index = nextAssignments.findIndex((assignment) => assignment.id === op.assignmentId);
+        if (index >= 0) {
+          nextAssignments[index] = {
+            ...nextAssignments[index],
+            employee: undefined,
+          };
+          assignmentsMutated = true;
+        }
+        continue;
+      }
+
+      if (operation.type === 'swap_shifts') {
+        const op = operation as any;
+        const index1 = nextAssignments.findIndex((assignment) => assignment.id === op.assignment1Id);
+        const index2 = nextAssignments.findIndex((assignment) => assignment.id === op.assignment2Id);
+
+        if (index1 >= 0 || index2 >= 0) {
+          const employeeForFirst = buildEmployeeInfo(op.employeeId2 ?? op.employee2Id);
+          const employeeForSecond = buildEmployeeInfo(op.employeeId ?? op.employee1Id);
+
+          if (index1 >= 0 && employeeForFirst) {
+            nextAssignments[index1] = {
+              ...nextAssignments[index1],
+              employee: employeeForFirst,
+            };
+            assignmentsMutated = true;
+          }
+
+          if (index2 >= 0 && employeeForSecond) {
+            nextAssignments[index2] = {
+              ...nextAssignments[index2],
+              employee: employeeForSecond,
+            };
+            assignmentsMutated = true;
+          }
+        }
+      }
+    }
+
+    let optimisticTemplatesChanged = false;
+    if (newTemplates.length > 0) {
+      const mergedTemplates = [...optimisticTemplates, ...newTemplates];
+      setOptimisticTemplates(mergedTemplates);
+      optimisticTemplatesChanged = true;
+    }
+
+    if (assignmentsMutated) {
+      setAssignments(nextAssignments);
+    }
+
+    try {
+      await applyPreview();
+    } catch (error) {
+      if (assignmentsMutated) {
+        setAssignments(previousAssignments);
+      }
+      if (optimisticTemplatesChanged) {
+        setOptimisticTemplates([...previousOptimisticTemplates]);
+      }
+      throw error;
+    }
+  }, [
+    preview,
+    currentStore?.id,
+    applyPreview,
+    assignments,
+    templates,
+    employees,
+    optimisticTemplates,
+    setAssignments,
+  ]);
 
   const handleSelectBlock = ({ day, block }: { day: DayKey; block: LaidBlock }) => {
     setDrawerError(null);
@@ -543,6 +927,10 @@ export default function SchedulePage() {
             assignments={assignments}
             facts={scheduleFacts}
             factsLoading={scheduleFactsLoading}
+            onPreviewCreated={fetchPreviewById}
+            preview={preview}
+            onApplyPreview={handleApplyPreview}
+            onDiscardPreview={discardPreview}
           />
         </div>
       </div>
@@ -559,8 +947,6 @@ export default function SchedulePage() {
         error={drawerError}
         setError={setDrawerError}
       />
-
-
 
     </div>
   );

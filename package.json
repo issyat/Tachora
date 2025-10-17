@@ -18,6 +18,7 @@
     "@clerk/nextjs": "^6.32.0",
     "@hookform/resolvers": "^5.2.2",
     "@prisma/client": "^6.16.2",
+    "@sentry/nextjs": "^10.20.0",
     "@supabase/supabase-js": "^2.57.4",
     "jmespath": "^0.16.0",
     "jsonata": "^2.1.0",

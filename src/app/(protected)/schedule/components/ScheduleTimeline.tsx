@@ -102,13 +102,32 @@ function TimelineBlock({ day, block, windowStartMin, windowEndMin, onSelectBlock
   const top = block.lane * LANE_STRIDE;
   const hasAssignment = Boolean(block.assignment);
   const employee = block.assignment?.employee;
+  
+  // Check if this is a preview assignment or preview template
+  const isPreview = (block.assignment && 'isPreview' in block.assignment && block.assignment.isPreview) || ('isPreview' in block && block.isPreview);
+  const isPreviewRemoved = Boolean(block.assignment && 'isPreviewRemoved' in block.assignment && block.assignment.isPreviewRemoved);
+
+  // Different styles for preview vs regular vs removed
+  let blockClassName;
+  if (isPreviewRemoved) {
+    // Faded/strikethrough style for removed assignments
+    blockClassName = 'border-red-300 bg-red-50/50 hover:border-red-400 opacity-50';
+  } else if (isPreview) {
+    // Green/highlighted style for preview assignments
+    blockClassName = 'border-green-400 bg-green-50 hover:border-green-500 ring-2 ring-green-200';
+  } else if (hasAssignment) {
+    // Normal assigned style
+    blockClassName = 'border-slate-300 bg-slate-50 hover:border-slate-400';
+  } else {
+    // Open shift style
+    blockClassName = 'border-dashed border-blue-300 bg-blue-50/70 hover:border-blue-400';
+  }
 
   return (
     <div
       role="button"
       tabIndex={0}
-      className={`absolute cursor-pointer rounded-md border px-3 py-2 text-xs shadow-sm transition ${hasAssignment ? 'border-slate-300 bg-slate-50 hover:border-slate-400' : 'border-dashed border-blue-300 bg-blue-50/70 hover:border-blue-400'
-        }`}
+      className={`absolute cursor-pointer rounded-md border px-3 py-2 text-xs shadow-sm transition ${blockClassName}`}
       style={{ left: `${left}%`, width: `${width}%`, top, height: LANE_HEIGHT, zIndex: 10 - block.lane }}
       onClick={() => onSelectBlock({ day, block })}
       onDragOver={(event) => {
@@ -137,10 +156,17 @@ function TimelineBlock({ day, block, windowStartMin, windowEndMin, onSelectBlock
             style={{ backgroundColor: employee.color }}
             aria-hidden
           />
-          <span className="text-xs font-medium">{employee.name}</span>
+          <span className="text-xs font-medium">
+            {employee.name}
+            {isPreview && <span className="ml-1 text-green-600 font-semibold">(Preview)</span>}
+            {isPreviewRemoved && <span className="ml-1 text-red-600 line-through">(Removing)</span>}
+          </span>
         </div>
       ) : (
-        <div className="mt-1 text-xs text-blue-600">Drop an employee</div>
+        <div className="mt-1 text-xs text-blue-600">
+          Drop an employee
+          {isPreview && <span className="ml-1 text-green-600 font-semibold">(Preview)</span>}
+        </div>
       )}
     </div>
   );

@@ -132,6 +132,7 @@ export async function GET(request: Request) {
         id: schedule.id,
         weekId: schedule.isoWeek,
         state: schedule.state,
+        version: schedule.version,
         generatedAt: schedule.generatedAt,
       },
     });

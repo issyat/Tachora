@@ -59,7 +59,7 @@ export interface CreateStoreRequest {
   closingTime?: string; // HH:mm format
 }
 
-export interface UpdateStoreRequest extends Partial<CreateStoreRequest> {}
+export type UpdateStoreRequest = Partial<CreateStoreRequest>;
 
 // Employee-related API types
 export interface EmployeeAvailabilitySlot {
@@ -103,7 +103,7 @@ export interface CreateEmployeeRequest {
   availability: EmployeeAvailabilitySlot[];
 }
 
-export interface UpdateEmployeeRequest extends Partial<CreateEmployeeRequest> {}
+export type UpdateEmployeeRequest = Partial<CreateEmployeeRequest>;
 
 export interface BulkEmployeesRequest {
   storeId: string;
@@ -123,12 +123,13 @@ export interface WorkTypeResponse {
 }
 
 export interface CreateWorkTypeRequest {
-  storeId: string;
+  id?: string; // Optional - present when updating existing work type
+  storeId?: string; // Optional - provided at API level
   name: string;
   color?: string;
 }
 
-export interface UpdateWorkTypeRequest extends Partial<Omit<CreateWorkTypeRequest, 'storeId'>> {}
+export type UpdateWorkTypeRequest = Partial<Omit<CreateWorkTypeRequest, 'storeId'>>;
 
 // Shift Template API types
 export interface ShiftTemplateDays {
@@ -164,7 +165,7 @@ export interface CreateShiftTemplateRequest {
   endTime: string;   // HH:mm format
 }
 
-export interface UpdateShiftTemplateRequest extends Partial<Omit<CreateShiftTemplateRequest, 'storeId'>> {}
+export type UpdateShiftTemplateRequest = Partial<Omit<CreateShiftTemplateRequest, 'storeId'>>;
 
 // Schedule API types
 export interface ScheduleResponse {
@@ -210,7 +211,7 @@ export interface CreateAssignmentRequest {
   locked?: boolean;
 }
 
-export interface UpdateAssignmentRequest extends Partial<Omit<CreateAssignmentRequest, 'scheduleId'>> {}
+export type UpdateAssignmentRequest = Partial<Omit<CreateAssignmentRequest, 'scheduleId'>>;
 
 // Setup/Onboarding API types
 export interface SetupResponse extends ApiResponse {

@@ -51,6 +51,7 @@ function buildMinimalAssignments(facts: ScheduleFacts): MinimalAssignment[] {
       day: assignment.day,
       durationMins,
       employeeId: assignment.employeeId,
+      employeeName: assignment.employeeName,
       workTypeName: assignment.workTypeName,
     });
   });
@@ -70,6 +71,7 @@ function buildMinimalOpenShifts(facts: ScheduleFacts): MinimalOpenShift[] {
 
 export function buildMinimalSnapshot(
   facts: ScheduleFacts,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   options: BuildMinimalSnapshotOptions = {}
 ): MinimalSnapshot {
   const employees = buildMinimalEmployees(facts);

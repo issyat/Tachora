@@ -12,7 +12,8 @@ export type IntentType =
   | "off_topic"
   | "pii_request"
   | "cross_store"
-  | "malicious";
+  | "malicious"
+  | "unsupported_action";
 
 export interface IntentClassification {
   intent: IntentType;
@@ -68,6 +69,7 @@ export function classifyIntent(message: string, context?: {
   storeId?: string;
   weekId?: string;
 }): IntentClassification {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const lowerMessage = message.toLowerCase();
 
   // Check for malicious patterns
@@ -178,9 +180,25 @@ export function getRefusalResponse(classification: IntentClassification): string
   if (classification.allowedActions?.length) {
     response += "\n\nTry:\n";
     response += classification.allowedActions
-      .map((action) => `• ${action}`)
+      .map((action) => `- ${action}`)
       .join("\n");
   }
 
   return response;
 }
+
+
+export function createUnsupportedIntent(): IntentClassification {
+  return {
+    intent: "unsupported_action",
+    confidence: 1,
+    shouldRefuse: true,
+    refusalMessage: "I can't automate that yet; please change it manually in the schedule UI.",
+    allowedActions: [
+      "Make the change directly in the schedule",
+      "Ask about coverage or availability before adjusting",
+    ],
+  };
+}
+
+

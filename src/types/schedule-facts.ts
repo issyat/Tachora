@@ -189,6 +189,7 @@ export interface MinimalAssignment {
   day: Weekday;
   durationMins: number;
   employeeId?: string;
+  employeeName?: string;
   workTypeName: string;
 }
 
@@ -293,7 +294,7 @@ export interface CheckRulesetRequest {
   operations: PreviewOperation[];
 }
 
-export interface CheckRulesetResult extends ValidationResult {}
+export type CheckRulesetResult = ValidationResult;
 
 export interface SolverSuggestionRequest {
   mode: 'fill_unassigned' | 'rebalance' | 'full';

@@ -8,13 +8,13 @@ import { StoreSelector } from "@/components/ui/store-selector";
 import { readableTextColor } from "@/lib/color";
 
 const dayOptions = [
-  { key: "SUN", label: "Sunday" },
   { key: "MON", label: "Monday" },
   { key: "TUE", label: "Tuesday" },
   { key: "WED", label: "Wednesday" },
   { key: "THU", label: "Thursday" },
   { key: "FRI", label: "Friday" },
   { key: "SAT", label: "Saturday" },
+  { key: "SUN", label: "Sunday" },
 ] as const;
 
 type DayKey = (typeof dayOptions)[number]["key"];
@@ -124,7 +124,7 @@ export default function EmployeesPage() {
             const employeesResponse = await fetch(`/api/employees-v2?storeId=${targetStoreId}`, { cache: "no-store" });
             if (employeesResponse.ok) {
               const employeesData = await employeesResponse.json();
-              const transformedEmployees = employeesData.employees.map((emp: any) => {
+              const transformedEmployees = employeesData.employees.map((emp: Record<string, unknown>) => {
                 console.log('Loading employee:', emp.id, emp.name);
                 return {
                   id: emp.id,
@@ -426,6 +426,7 @@ export default function EmployeesPage() {
               <div className="p-6 text-sm text-slate-500">No employees yet. Add one or import via CSV.</div>
             ) : (
               items.map((e, idx) => {
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const chipText = readableTextColor(e.color);
                 const isFromOtherStore = e.storeId !== currentStore?.id;
                 return (

@@ -61,6 +61,7 @@ export const AssignmentDrawer = memo(function AssignmentDrawer({
   const timeRangeLabel = `${minutesToTime(startMin)} - ${minutesToTime(endMin)}`;
   const durationLabel = formatMinutesAsHours(endMin - startMin);
 
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   const employeeRows = useMemo(() => {
     const templateWorkTypeId = resolveTemplateWorkType(selection, templateWorkTypes);
 

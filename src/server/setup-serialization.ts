@@ -76,7 +76,7 @@ export function serializeEmployees(employees: EmployeeWithRelations[]): Employee
       roles,
       availability: serializeAvailability(employee.availability ?? []),
       storeId: employee.storeId,
-      storeName: (employee as any).store?.name, // For cross-store employees
+      storeName: 'store' in employee && employee.store && typeof employee.store === 'object' && 'name' in employee.store ? (employee.store.name as string) : undefined,
     } satisfies EmployeeResponse;
   });
 }

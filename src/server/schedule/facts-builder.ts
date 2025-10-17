@@ -4,7 +4,6 @@ import {
   MAX_DAILY_MINUTES,
   MIN_REST_MINUTES,
   MINUTES_PER_DAY,
-  STUDENT_WEEKLY_LIMIT_MINUTES,
   WEEKDAY_ORDER,
 } from "@/lib/schedule/constants";
 import { ensureIsoWeekId } from "@/lib/week";
@@ -29,6 +28,7 @@ import type {
 } from "@/types";
 import { computeSnapshotVersion } from "./eval-query";
 import { buildMinimalSnapshot } from "./minimal-snapshot";
+import { computeFit, determineTargetMinutes, type FitEmployeeProfile, type FitShift } from "./fits-engine";
 
 type Minute = number;
 type DaysConfig = Record<Weekday, boolean>;
@@ -59,6 +59,20 @@ interface EmployeeSnapshot {
   availability: Record<Weekday, ScheduleFactsAvailabilitySnapshot>;
   workTypeIds: string[];
   workTypeNames: string[];
+}
+
+function toFitProfile(employee: EmployeeSnapshot): FitEmployeeProfile {
+  return {
+    id: employee.id,
+    name: employee.name,
+    storeId: employee.storeId,
+    canWorkAcrossStores: employee.canWorkAcrossStores,
+    contractType: employee.contractType,
+    weeklyTargetMinutes: employee.weeklyTargetMinutes,
+    availability: employee.availability,
+    workTypeIds: employee.workTypeIds,
+    workTypeNames: employee.workTypeNames,
+  };
 }
 
 interface EmployeeLoad extends PrismaEmployee {
@@ -524,10 +538,7 @@ function evaluateHoursLimits(
   conflicts: ScheduleFactsConflict[],
 ) {
   const duration = assignment.endMin - assignment.startMin;
-  const baseTarget = employee.weeklyTargetMinutes;
-  const cappedTarget = employee.contractType === "STUDENT"
-    ? Math.min(baseTarget, STUDENT_WEEKLY_LIMIT_MINUTES)
-    : baseTarget;
+  const cappedTarget = determineTargetMinutes(toFitProfile(employee));
 
   const newWeekly = state.weeklyMinutes + duration;
   const newDaily = state.dailyMinutes[assignment.day] + duration;
@@ -558,6 +569,7 @@ function evaluateHoursLimits(
   state.dailyMinutes[assignment.day] = newDaily;
   state.segments.push({
     assignmentId: assignment.id,
+    employeeId: assignment.employeeId ?? employee.id,
     day: assignment.day,
     startMin: assignment.startMin,
     endMin: assignment.endMin,
@@ -626,9 +638,7 @@ function buildEmployeeFacts(
         workType: assignment.workTypeName,
       }));
 
-    const target = employee.contractType === "STUDENT"
-      ? Math.min(employee.weeklyTargetMinutes, STUDENT_WEEKLY_LIMIT_MINUTES)
-      : employee.weeklyTargetMinutes;
+    const target = determineTargetMinutes(toFitProfile(employee));
 
     const targetDelta = state.weeklyMinutes - target;
 
@@ -657,96 +667,6 @@ function buildEmployeeFacts(
   });
 }
 
-interface CandidateEvaluationResult {
-  ok: boolean;
-  reasons: string[];
-  warnings: string[];
-}
-
-function evaluateCandidate(
-  employee: EmployeeSnapshot,
-  state: EmployeeWorkingState,
-  shift: NormalizedAssignment,
-  storeId: string,
-): CandidateEvaluationResult {
-  const reasons: string[] = [];
-  const warnings: string[] = [];
-
-  const slot = employee.availability[shift.day];
-  if (!slot || slot.isOff) {
-    reasons.push("off");
-  } else {
-    if (shift.startMin < slot.startMin) {
-      reasons.push("before-availability");
-    }
-    if (shift.endMin > slot.endMin) {
-      reasons.push("after-availability");
-    }
-  }
-
-  if (!employee.canWorkAcrossStores && employee.storeId !== storeId) {
-    reasons.push("store");
-  }
-
-  if (employee.workTypeIds.length > 0) {
-    const matchesId = employee.workTypeIds.includes(shift.workTypeId);
-    const matchesName = employee.workTypeNames.includes(shift.workTypeName.toLowerCase());
-    if (!matchesId && !matchesName) {
-      reasons.push("work-type");
-    }
-  }
-
-  const duration = shift.endMin - shift.startMin;
-  const baseTarget = employee.weeklyTargetMinutes;
-  const target = employee.contractType === "STUDENT"
-    ? Math.min(baseTarget, STUDENT_WEEKLY_LIMIT_MINUTES)
-    : baseTarget;
-
-  const weekly = state.weeklyMinutes + duration;
-  const daily = state.dailyMinutes[shift.day] + duration;
-
-  if (weekly > target) {
-    reasons.push("weekly-limit");
-  } else if (target - weekly < 60) {
-    warnings.push("close-to-weekly-limit");
-  }
-
-  if (daily > MAX_DAILY_MINUTES) {
-    reasons.push("daily-limit");
-  } else if (MAX_DAILY_MINUTES - daily < 30) {
-    warnings.push("dense-day");
-  }
-
-  const newAbsStart = DAY_TO_INDEX[shift.day] * MINUTES_PER_DAY + shift.startMin;
-  const newAbsEnd = DAY_TO_INDEX[shift.day] * MINUTES_PER_DAY + shift.endMin;
-
-  const overlap = state.segments.some((segment) => {
-    const otherAbsStart = DAY_TO_INDEX[segment.day] * MINUTES_PER_DAY + segment.startMin;
-    const otherAbsEnd = DAY_TO_INDEX[segment.day] * MINUTES_PER_DAY + segment.endMin;
-    return !(newAbsEnd <= otherAbsStart || newAbsStart >= otherAbsEnd);
-  });
-  if (overlap) {
-    reasons.push("overlap");
-  }
-
-  const violatesRest = state.segments.some((segment) => {
-    const otherAbsStart = DAY_TO_INDEX[segment.day] * MINUTES_PER_DAY + segment.startMin;
-    const otherAbsEnd = DAY_TO_INDEX[segment.day] * MINUTES_PER_DAY + segment.endMin;
-    const gapBefore = newAbsStart - otherAbsEnd;
-    const gapAfter = otherAbsStart - newAbsEnd;
-    return (gapBefore > 0 && gapBefore < MIN_REST_MINUTES) || (gapAfter > 0 && gapAfter < MIN_REST_MINUTES);
-  });
-  if (violatesRest) {
-    reasons.push("rest");
-  }
-
-  return {
-    ok: reasons.length === 0,
-    reasons,
-    warnings,
-  };
-}
-
 function buildCandidateStates(employees: EmployeeSnapshot[], assignments: NormalizedAssignment[]): Map<string, EmployeeWorkingState> {
   const states = new Map<string, EmployeeWorkingState>();
 
@@ -767,6 +687,7 @@ function buildCandidateStates(employees: EmployeeSnapshot[], assignments: Normal
     state.dailyMinutes[assignment.day] += duration;
     state.segments.push({
       assignmentId: assignment.id,
+      employeeId: assignment.employeeId,
       day: assignment.day,
       startMin: assignment.startMin,
       endMin: assignment.endMin,
@@ -933,23 +854,34 @@ function buildOpenShiftFacts(
   const candidateStates = buildCandidateStates(employees, assignments);
 
   return openAssignments.map<ScheduleFactsOpenShift>((assignment) => {
+    const fitShift: FitShift = {
+      id: assignment.id,
+      day: assignment.day,
+      startMin: assignment.startMin,
+      endMin: assignment.endMin,
+      workTypeId: assignment.workTypeId,
+      workTypeName: assignment.workTypeName,
+    };
     const candidates: ScheduleFactsOpenShift["candidates"] = [];
 
     employees.forEach((employee) => {
       const state = candidateStates.get(employee.id) ?? ensureWorkingState();
-      const evaluation = evaluateCandidate(employee, state, assignment, storeId);
-      if (evaluation.ok) {
+      const profile = toFitProfile(employee);
+      const result = computeFit({
+        storeId,
+        employee: profile,
+        shift: fitShift,
+        state,
+      });
+      if (result.fits) {
         const duration = assignment.endMin - assignment.startMin;
-        const baseTarget = employee.weeklyTargetMinutes;
-        const target = employee.contractType === "STUDENT"
-          ? Math.min(baseTarget, STUDENT_WEEKLY_LIMIT_MINUTES)
-          : baseTarget;
+        const target = determineTargetMinutes(profile);
         const remaining = Math.max(0, target - (state.weeklyMinutes + duration));
         candidates.push({
           id: employee.id,
           name: employee.name,
           remainingWeeklyMinutes: remaining,
-          warnings: evaluation.warnings,
+          warnings: result.warnings,
         });
       }
     });

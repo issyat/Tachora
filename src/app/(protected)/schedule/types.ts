@@ -74,6 +74,7 @@ export interface ScheduleSummary {
   id: string;
   weekId: string;
   state: string;
+  version: number;
   generatedAt?: string;
 }
 

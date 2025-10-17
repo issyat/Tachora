@@ -92,6 +92,7 @@ model Schedule {
   storeId     String
   isoWeek     String
   state       ScheduleState @default(Draft)
+  version     Int           @default(1)
   generatedAt DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
@@ -176,4 +177,33 @@ enum Weekday {
 enum ScheduleState {
   Draft
   Published
+}
+
+model ChatThread {
+  threadId       String        @id @map("thread_id")
+  userId         String        @map("user_id")
+  storeId        String?       @map("store_id")
+  weekId         String?       @map("week_id")
+  rollingSummary String?       @map("rolling_summary")
+  recentMessages Json?         @map("recent_messages")
+  updatedAt      DateTime      @default(now()) @map("updated_at")
+  messages       ChatMessage[]
+
+  @@map("chat_threads")
+  @@index([userId, storeId, weekId], map: "chat_threads_scoped_idx")
+}
+
+model ChatMessage {
+  id        String    @id @default(uuid())
+  threadId  String    @map("thread_id")
+  userId    String    @map("user_id")
+  storeId   String?   @map("store_id")
+  weekId    String?   @map("week_id")
+  role      String
+  content   String
+  timestamp DateTime
+  thread    ChatThread @relation(fields: [threadId], references: [threadId], onDelete: Cascade)
+
+  @@map("chat_messages")
+  @@index([threadId, timestamp], map: "chat_messages_thread_ts_idx")
 }
