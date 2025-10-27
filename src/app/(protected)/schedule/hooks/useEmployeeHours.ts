@@ -6,6 +6,7 @@ import type { Assignment } from "../types";
 interface UseEmployeeHoursOptions {
   storeId?: string | null;
   weekId?: string | null;
+  employees?: Array<{ id: string }>;
 }
 
 export type EmployeeMinutesMap = Record<string, number>;
@@ -29,7 +30,7 @@ function calculateLocalHours(assignments: Assignment[]): EmployeeMinutesMap {
 }
 
 export function useEmployeeHours(assignments: Assignment[], options: UseEmployeeHoursOptions = {}) {
-  const { storeId, weekId } = options;
+  const { storeId, weekId, employees } = options;
   const [serverHours, setServerHours] = useState<EmployeeMinutesMap>({});
   const [loading, setLoading] = useState(false);
 
@@ -79,22 +80,33 @@ export function useEmployeeHours(assignments: Assignment[], options: UseEmployee
     // Start with server hours which include ALL stores
     const merged = { ...serverHours };
     
-    // Update with local hours for instant UI feedback
-    // But ONLY for employees that have local assignments
-    // Don't override server hours for cross-store employees with 0 local assignments!
-    Object.entries(localHours).forEach(([employeeId, localMinutes]) => {
-      if (localMinutes > 0) {
-        // If there are local assignments, show those for instant feedback
-        merged[employeeId] = localMinutes;
-      } else if (!(employeeId in serverHours)) {
-        // Only set to 0 if server also doesn't have data
-        merged[employeeId] = 0;
+    // Get all employees that should be tracked
+    const allEmployeeIds = new Set<string>();
+    
+    // Add employees from assignments
+    assignments.forEach(assignment => {
+      if (assignment.employee?.id) {
+        allEmployeeIds.add(assignment.employee.id);
       }
-      // If localMinutes is 0 but server has hours, keep server hours (cross-store)
+    });
+    
+    // Add employees from the employees list (if provided)
+    if (employees) {
+      employees.forEach(employee => {
+        allEmployeeIds.add(employee.id);
+      });
+    }
+    
+    // Update with local hours for instant UI feedback
+    allEmployeeIds.forEach(employeeId => {
+      const localMinutes = localHours[employeeId] || 0;
+      // Always use local calculation for tracked employees
+      // This ensures immediate feedback when assignments are added/removed
+      merged[employeeId] = localMinutes;
     });
     
     return merged;
-  }, [serverHours, localHours]);
+  }, [serverHours, localHours, assignments, employees]);
 
   return {
     hours: mergedHours,

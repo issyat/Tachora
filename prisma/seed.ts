@@ -248,8 +248,28 @@ const SEED_CONFIG = {
         phone: '+32 2 012 3456',
         label: 'Visual Merchandiser',
         color: '#8b5cf6',
-        contractType: 'PART_TIME' as ContractType,
-        weeklyMinutesTarget: 1200,
+        contractType: 'FLEXI_JOB' as ContractType,
+        weeklyMinutesTarget: 1800, // 30 hours for flexi job
+        canWorkAcrossStores: true,
+        workTypes: ['Sales Associate', 'Customer Service'],
+        availability: {
+          MON: { isOff: false, startTime: '09:00', endTime: '17:00' },
+          TUE: { isOff: false, startTime: '09:00', endTime: '17:00' },
+          WED: { isOff: false, startTime: '09:00', endTime: '17:00' },
+          THU: { isOff: false, startTime: '09:00', endTime: '17:00' },
+          FRI: { isOff: false, startTime: '09:00', endTime: '17:00' },
+          SAT: { isOff: true, startTime: '09:00', endTime: '17:00' },
+          SUN: { isOff: true, startTime: '09:00', endTime: '17:00' },
+        },
+      },
+      {
+        name: 'Marie Dubois',
+        email: 'marie@mediumretail.com',
+        phone: '+32 2 012 3457',
+        label: 'Flexi Sales Support',
+        color: '#f97316',
+        contractType: 'FLEXI_JOB' as ContractType,
+        weeklyMinutesTarget: 1500, // 25 hours for flexi job
         canWorkAcrossStores: true,
         workTypes: ['Sales Associate'],
         availability: {

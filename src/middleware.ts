@@ -5,6 +5,7 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/public(.*)",
+  "/availability(.*)", // Magic link availability pages
 ]);
 
 export default clerkMiddleware((auth, req) => {

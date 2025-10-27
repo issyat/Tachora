@@ -53,6 +53,7 @@ model Employee {
   weeklyMinutesTarget Int                @default(2400)
   assignments         Assignment[]
   availability        Availability[]
+  availabilityTokens  AvailabilityToken[]
   store               Store              @relation(fields: [storeId], references: [id])
   roles               EmployeeWorkType[]
 
@@ -71,6 +72,19 @@ model Availability {
   employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@unique([employeeId, day])
+}
+
+model AvailabilityToken {
+  id         String   @id @default(cuid())
+  token      String   @unique
+  employeeId String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([employeeId])
 }
 
 model ShiftTemplate {
@@ -155,6 +169,7 @@ enum ContractType {
   FULL_TIME
   PART_TIME
   STUDENT
+  FLEXI_JOB
 }
 
 enum OnboardingStep {
@@ -177,6 +192,12 @@ enum Weekday {
 enum ScheduleState {
   Draft
   Published
+}
+
+enum AdvisorScope {
+  HomeOnly
+  AllManaged
+  Specific
 }
 
 model ChatThread {
@@ -206,4 +227,30 @@ model ChatMessage {
 
   @@map("chat_messages")
   @@index([threadId, timestamp], map: "chat_messages_thread_ts_idx")
+}
+
+model AdvisorThread {
+  id        String        @id @default(cuid())
+  userId    String
+  storeId   String?
+  isoWeek   String?
+  scope     AdvisorScope  @default(HomeOnly)
+  extraStoreIds Json?
+  context Json? @db.JsonB @default("{}")
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  messages  AdvisorMessage[]
+
+  @@index([userId, storeId, isoWeek])
+}
+
+model AdvisorMessage {
+  id        String   @id @default(cuid())
+  threadId  String
+  role      String
+  content   Json
+  createdAt DateTime @default(now())
+  thread    AdvisorThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
 }

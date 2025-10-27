@@ -25,7 +25,7 @@ export function Modal({ open, title, onClose, children, widthClass = "max-w-lg" 
   return (
     <div className="fixed inset-0 z-50" aria-modal="true" role="dialog">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="absolute inset-0 flex items-center justify-center p-4">
+      <div className="absolute inset-0 flex items-start justify-center p-4 pt-8">
         <div className={`w-full ${widthClass} rounded-2xl bg-white p-6 shadow-xl`}>
           <div className="flex items-start justify-between gap-4">
             {title && <h3 className="text-lg font-semibold text-slate-900">{title}</h3>}

@@ -23,7 +23,8 @@ interface UseScheduleDataResult {
   loading: boolean;
   error: string | null;
   selectStore: (storeId: string) => void;
-  refresh: (storeId?: string) => Promise<void>;
+  selectWeek: (weekId: string) => void;
+  refresh: (storeId?: string, weekId?: string) => Promise<void>;
   setAssignments: React.Dispatch<React.SetStateAction<Assignment[]>>;
 }
 
@@ -46,8 +47,9 @@ export function useScheduleData(options: UseScheduleDataOptions = {}): UseSchedu
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const selectedStoreRef = useRef<string | null>(options.initialStoreId ?? null);
+  const selectedWeekRef = useRef<string | null>(null);
 
-  const performFetch = useCallback(async (storeId?: string) => {
+  const performFetch = useCallback(async (storeId?: string, weekId?: string) => {
     setLoading(true);
     setError(null);
 
@@ -64,10 +66,11 @@ export function useScheduleData(options: UseScheduleDataOptions = {}): UseSchedu
       setEmployees(setupData.employees ?? []);
 
       if (nextStore?.id) {
-        const assignmentsUrl = `/api/schedule/assignments?storeId=${nextStore.id}`;
+        const assignmentsUrl = `/api/schedule/assignments?storeId=${nextStore.id}${weekId ? `&weekId=${weekId}` : ''}`;
         const assignmentsData = await fetchJson<{ assignments: Assignment[]; schedule: ScheduleSummary | null }>(assignmentsUrl);
         setAssignments(assignmentsData.assignments ?? []);
         setSchedule(assignmentsData.schedule ?? null);
+        selectedWeekRef.current = weekId ?? null;
       } else {
         setAssignments([]);
         setSchedule(null);
@@ -88,14 +91,26 @@ export function useScheduleData(options: UseScheduleDataOptions = {}): UseSchedu
   const selectStore = useCallback(
     (storeId: string) => {
       selectedStoreRef.current = storeId;
+      selectedWeekRef.current = null; // Reset week when changing stores
       void performFetch(storeId);
     },
     [performFetch],
   );
 
+  const selectWeek = useCallback(
+    (weekId: string) => {
+      selectedWeekRef.current = weekId;
+      void performFetch(selectedStoreRef.current ?? undefined, weekId);
+    },
+    [performFetch],
+  );
+
   const refresh = useCallback(
-    async (storeId?: string) => {
-      await performFetch(storeId ?? selectedStoreRef.current ?? undefined);
+    async (storeId?: string, weekId?: string) => {
+      await performFetch(
+        storeId ?? selectedStoreRef.current ?? undefined,
+        weekId ?? selectedWeekRef.current ?? undefined
+      );
     },
     [performFetch],
   );
@@ -111,9 +126,10 @@ export function useScheduleData(options: UseScheduleDataOptions = {}): UseSchedu
       loading,
       error,
       selectStore,
+      selectWeek,
       refresh,
       setAssignments,
     }),
-    [assignments, currentStore, employees, error, loading, refresh, schedule, selectStore, stores, templates],
+    [assignments, currentStore, employees, error, loading, refresh, schedule, selectStore, selectWeek, stores, templates],
   );
 }

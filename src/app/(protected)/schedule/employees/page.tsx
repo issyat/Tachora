@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -18,8 +18,6 @@ const dayOptions = [
 ] as const;
 
 type DayKey = (typeof dayOptions)[number]["key"];
-
-
 
 const DEFAULT_WEEKLY_MINUTES = 40 * 60;
 
@@ -106,13 +104,15 @@ export default function EmployeesPage() {
   const fetchData = (storeId?: string) => {
     let active = true;
     setIsLoading(true);
+
     const setupUrl = storeId ? `/api/setup?storeId=${storeId}` : "/api/setup";
-    
+
     // First fetch setup data (stores, current store, work types)
     fetch(setupUrl, { cache: "no-store" })
       .then((r) => r.json())
       .then(async (data: SetupResponse) => {
         if (!active) return;
+
         setStores(data.stores ?? []);
         setCurrentStore(data.store ?? null);
         setWorkTypes(data.workTypes ?? []);
@@ -163,6 +163,7 @@ export default function EmployeesPage() {
         });
       })
       .finally(() => active && setIsLoading(false));
+
     return () => {
       active = false;
     };
@@ -249,6 +250,7 @@ export default function EmployeesPage() {
       });
       return;
     }
+
     if (workTypes.length > 0 && draft.roleIds.length === 0) {
       setError({
         title: "Work Type Required",
@@ -270,7 +272,7 @@ export default function EmployeesPage() {
     try {
       setError(null);
       setSaving(true);
-      
+
       if (editIndex === null) {
         // Create new employee
         const response = await fetch("/api/employees-v2", {
@@ -297,7 +299,7 @@ export default function EmployeesPage() {
         }
 
         const { employee } = await response.json();
-        
+
         // Transform the response to match our local format
         const newEmployee: EmployeePayload = {
           id: employee.id,
@@ -350,7 +352,7 @@ export default function EmployeesPage() {
         }
 
         const { employee } = await response.json();
-        
+
         // Transform the response to match our local format
         const updatedEmployee: EmployeePayload = {
           id: employee.id,
@@ -368,7 +370,7 @@ export default function EmployeesPage() {
 
         setItems((s) => s.map((it, i) => (i === editIndex ? updatedEmployee : it)));
       }
-      
+
       setOpen(false);
     } catch (err) {
       console.error(err);
@@ -381,8 +383,6 @@ export default function EmployeesPage() {
       setSaving(false);
     }
   }
-
-
 
   return (
     <div className="rounded-xl bg-white p-6 shadow-sm">
@@ -407,7 +407,9 @@ export default function EmployeesPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={openCreate} className="rounded-md border px-3 py-2">+ Add Employee</button>
+          <button onClick={openCreate} className="rounded-md border px-3 py-2">
+            + Add Employee
+          </button>
         </div>
       </div>
 
@@ -423,16 +425,22 @@ export default function EmployeesPage() {
 
           <div className="mt-4 rounded-lg border">
             {items.length === 0 ? (
-              <div className="p-6 text-sm text-slate-500">No employees yet. Add one or import via CSV.</div>
+              <div className="p-6 text-sm text-slate-500">
+                No employees yet. Add one or import via CSV.
+              </div>
             ) : (
               items.map((e, idx) => {
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const chipText = readableTextColor(e.color);
                 const isFromOtherStore = e.storeId !== currentStore?.id;
+
                 return (
-                  <div key={idx} className={`flex items-center justify-between gap-4 border-b p-4 last:border-b-0 ${
-                    isFromOtherStore ? 'bg-blue-50' : ''
-                  }`}>
+                  <div 
+                    key={idx} 
+                    className={`flex items-center justify-between gap-4 border-b p-4 last:border-b-0 ${
+                      isFromOtherStore ? 'bg-blue-50' : ''
+                    }`}
+                  >
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="truncate font-medium text-slate-900">
@@ -448,7 +456,6 @@ export default function EmployeesPage() {
                             From: {e.storeName}
                           </span>
                         )}
-
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
                           Weekly: {formatMinutes(e.weeklyMinutesTarget)}
                         </span>
@@ -485,8 +492,18 @@ export default function EmployeesPage() {
                     <div className="flex items-center gap-3">
                       {!isFromOtherStore && (
                         <>
-                          <button onClick={() => openEdit(idx)} className="text-sm text-slate-700 hover:underline" disabled={saving}>Edit</button>
-                          <button onClick={() => remove(idx)} className="text-sm text-red-600 hover:underline disabled:opacity-50" disabled={saving}>
+                          <button 
+                            onClick={() => openEdit(idx)} 
+                            className="text-sm text-slate-700 hover:underline" 
+                            disabled={saving}
+                          >
+                            Edit
+                          </button>
+                          <button 
+                            onClick={() => remove(idx)} 
+                            className="text-sm text-red-600 hover:underline disabled:opacity-50" 
+                            disabled={saving}
+                          >
                             {saving ? "..." : "Delete"}
                           </button>
                         </>
@@ -514,18 +531,42 @@ export default function EmployeesPage() {
       <Modal open={open} onClose={() => setOpen(false)} title={editIndex === null ? "Add employee" : "Edit employee"} widthClass="max-w-3xl">
         <div className="grid gap-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <input value={draft.name} onChange={(e) => updateDraft({ name: e.target.value })} placeholder="Name" className="rounded-md border px-3 py-2" />
-            <input value={draft.email} onChange={(e) => updateDraft({ email: e.target.value })} placeholder="Email" className="rounded-md border px-3 py-2" />
-            <input value={draft.phone} onChange={(e) => updateDraft({ phone: e.target.value })} placeholder="Phone" className="rounded-md border px-3 py-2" />
+            <input 
+              value={draft.name} 
+              onChange={(e) => updateDraft({ name: e.target.value })} 
+              placeholder="Name" 
+              className="rounded-md border px-3 py-2" 
+            />
+            <input 
+              value={draft.email} 
+              onChange={(e) => updateDraft({ email: e.target.value })} 
+              placeholder="Email" 
+              className="rounded-md border px-3 py-2" 
+            />
+            <input 
+              value={draft.phone} 
+              onChange={(e) => updateDraft({ phone: e.target.value })} 
+              placeholder="Phone" 
+              className="rounded-md border px-3 py-2" 
+            />
           </div>
-          <div className="flex flex-wrap items-center gap-3">
 
+          <div className="flex flex-wrap items-center gap-3">
             <label className="flex items-center gap-2 text-sm text-slate-700">
               <span>Color</span>
-              <input type="color" value={draft.color} onChange={(e) => updateDraft({ color: e.target.value })} className="h-8 w-12 rounded" />
+              <input 
+                type="color" 
+                value={draft.color} 
+                onChange={(e) => updateDraft({ color: e.target.value })} 
+                className="h-8 w-12 rounded" 
+              />
             </label>
             <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={draft.canWorkAcrossStores} onChange={(e) => updateDraft({ canWorkAcrossStores: e.target.checked })} />
+              <input 
+                type="checkbox" 
+                checked={draft.canWorkAcrossStores} 
+                onChange={(e) => updateDraft({ canWorkAcrossStores: e.target.checked })} 
+              />
               Can work across stores
             </label>
             <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -581,8 +622,7 @@ export default function EmployeesPage() {
                     No work types defined. 
                     <Link href="/schedule/work-types" className="ml-1 text-blue-600 hover:underline">
                       Create work types first
-                    </Link>
-                    .
+                    </Link>.
                   </p>
                 )}
               </div>
@@ -598,17 +638,33 @@ export default function EmployeesPage() {
                 return (
                   <div key={d.key} className="flex flex-col gap-3 px-3 py-2 sm:flex-row sm:items-center">
                     <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                      <input type="checkbox" checked={isOff} onChange={(ev) => updateDraftAvailability(dIdx, { isOff: ev.target.checked })} />
+                      <input 
+                        type="checkbox" 
+                        checked={isOff} 
+                        onChange={(ev) => updateDraftAvailability(dIdx, { isOff: ev.target.checked })} 
+                      />
                       {d.label}
                     </label>
                     <div className="flex items-center gap-3">
                       <div className="flex items-center gap-2 text-xs uppercase text-slate-500">
                         <span>start</span>
-                        <input type="time" value={slot?.startTime ?? "09:00"} onChange={(ev) => updateDraftAvailability(dIdx, { startTime: ev.target.value })} disabled={isOff} className="w-28 rounded-md border px-2 py-1" />
+                        <input 
+                          type="time" 
+                          value={slot?.startTime ?? "09:00"} 
+                          onChange={(ev) => updateDraftAvailability(dIdx, { startTime: ev.target.value })} 
+                          disabled={isOff} 
+                          className="w-28 rounded-md border px-2 py-1" 
+                        />
                       </div>
                       <div className="flex items-center gap-2 text-xs uppercase text-slate-500">
                         <span>end</span>
-                        <input type="time" value={slot?.endTime ?? "17:00"} onChange={(ev) => updateDraftAvailability(dIdx, { endTime: ev.target.value })} disabled={isOff} className="w-28 rounded-md border px-2 py-1" />
+                        <input 
+                          type="time" 
+                          value={slot?.endTime ?? "17:00"} 
+                          onChange={(ev) => updateDraftAvailability(dIdx, { endTime: ev.target.value })} 
+                          disabled={isOff} 
+                          className="w-28 rounded-md border px-2 py-1" 
+                        />
                       </div>
                       {isOff && <span className="text-xs text-slate-500">Off</span>}
                     </div>
@@ -619,7 +675,9 @@ export default function EmployeesPage() {
           </div>
 
           <div className="flex justify-end gap-2">
-            <button onClick={() => setOpen(false)} className="rounded-md border px-3 py-2" disabled={saving}>Cancel</button>
+            <button onClick={() => setOpen(false)} className="rounded-md border px-3 py-2" disabled={saving}>
+              Cancel
+            </button>
             <button onClick={confirmDraft} className="rounded-md bg-slate-800 px-3 py-2 text-white disabled:opacity-50" disabled={saving}>
               {saving ? "Saving..." : "Save"}
             </button>

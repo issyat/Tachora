@@ -6,6 +6,7 @@ import { ensureManager } from "@/server/manager";
 import { timeDateToString } from "@/lib/time";
 import { ensureIsoWeekId } from "@/lib/week";
 import { validateAssignment } from "@/server/schedule/assignment-validator";
+
 import type { Weekday } from "@/types";
 
 interface AssignmentResponse {
@@ -62,6 +63,8 @@ export async function GET(request: Request) {
     }
 
     const isoWeek = ensureIsoWeekId(weekId, new Date());
+
+
 
     const schedule = await prisma.schedule.findUnique({
       where: {
@@ -181,6 +184,8 @@ export async function POST(request: Request) {
     }
 
     const isoWeek = ensureIsoWeekId(weekId, new Date());
+
+
 
     const validation = await validateAssignment({
       managerId: manager.id,

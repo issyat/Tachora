@@ -1,6 +1,7 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { ErrorModal } from "@/components/ui/error-modal";
 import { usePreview } from "@/hooks/use-preview";
@@ -10,18 +11,18 @@ import { useEmployeeHours } from "./hooks/useEmployeeHours";
 import { ScheduleToolbar } from "./components/ScheduleToolbar";
 import { AvailabilitySidebar } from "./components/AvailabilitySidebar";
 import { ScheduleTimeline } from "./components/ScheduleTimeline";
-import { ScheduleChatAssistant } from "./components/ScheduleChatAssistant";
+import { ScheduleCopilotAssistant } from "./components/ScheduleCopilotAssistant";
+import { AnswerPackAssistant } from "./components/AnswerPackAssistant";
 import { AssignmentDrawer, type AssignmentSelection } from "./components/AssignmentDrawer";
 import { buildEmployeeSnapshots } from "./utils/snapshots";
 import { buildLayouts, type LaidBlock } from "./utils/layout";
 import { DAY_ORDER, MIN_WINDOW_MINUTES } from "./utils/constants";
 import { minutesToTime, timeToMinutes } from "./utils/time";
 import type { Assignment, DayKey, Employee, Template } from "./types";
-import { useScheduleFacts } from "./hooks/useScheduleFacts";
+
 
 const DEFAULT_OPENING_TIME = "09:00";
 const DEFAULT_CLOSING_TIME = "22:00";
-
 
 type DayFilter = DayKey | "ALL";
 
@@ -85,6 +86,9 @@ function toSelection(day: DayKey, block: LaidBlock): AssignmentSelection {
 }
 
 export default function SchedulePage() {
+  const router = useRouter();
+  const [setupCheckLoading, setSetupCheckLoading] = useState(true);
+  
   const {
     stores,
     currentStore,
@@ -95,30 +99,40 @@ export default function SchedulePage() {
     loading,
     error,
     selectStore,
+    selectWeek,
     refresh,
     setAssignments,
   } = useScheduleData();
 
+  // Check if user has completed setup
+  useEffect(() => {
+    async function checkSetup() {
+      try {
+        const response = await fetch("/api/setup", { cache: "no-store" });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.onboardingStep !== "DONE") {
+            router.replace("/setup");
+            return;
+          }
+        }
+      } catch (error) {
+        console.warn("Failed to check setup status:", error);
+      }
+      setSetupCheckLoading(false);
+    }
+    
+    checkSetup();
+  }, [router]);
+
   const { hours: crossStoreMinutes } = useEmployeeHours(assignments, {
     storeId: currentStore?.id,
-    weekId: schedule?.weekId
+    weekId: schedule?.weekId,
+    employees: employees
   });
   const snapshots = useMemo(() => buildEmployeeSnapshots(assignments), [assignments]);
 
-  const {
-    facts: scheduleFacts,
-    loading: scheduleFactsLoading,
-    error: scheduleFactsError,
-  } = useScheduleFacts(assignments, {
-    storeId: currentStore?.id,
-    weekId: schedule?.weekId,
-  });
 
-  useEffect(() => {
-    if (scheduleFactsError) {
-      console.warn("Failed to refresh schedule facts", scheduleFactsError);
-    }
-  }, [scheduleFactsError]);
 
   const templateWorkTypes = useMemo(() => {
     const index = new Map<string, string | null>();
@@ -151,39 +165,11 @@ export default function SchedulePage() {
   const [operationInProgress, setOperationInProgress] = useState(false);
   const [optimisticTemplates, setOptimisticTemplates] = useState<Template[]>([]);
 
-  // Preview state management (only enabled when store and schedule are loaded)
-  const {
-    preview,
-    visualization,
-    isLoading: previewLoading,
-    error: previewError,
-    fetchPreviewById,
-    applyPreview,
-    undoPreview,
-    discardPreview,
-  } = usePreview({
+  // Preview state management (stubbed while assistant is offline)
+  const { preview, applyPreview } = usePreview({
     storeId: currentStore?.id ?? '',
     weekId: schedule?.weekId ?? '',
-    snapshotVersion: schedule?.version?.toString() ?? '1', // Use actual schedule version
-    onApplySuccess: async () => {
-      // Wait for refresh to complete before UI updates
-      await refresh();
-      // Clear optimistic templates after real data loads
-      setOptimisticTemplates([]);
-    },
-    onUndoSuccess: async () => {
-      // Wait for refresh to complete before UI updates
-      await refresh();
-    },
-    onError: (err) => {
-      setAssignmentError({
-        title: 'Preview Error',
-        message: err.message || 'Failed to process preview',
-        suggestion: 'Please try again or discard the preview.'
-      });
-      // Clear optimistic templates on error
-      setOptimisticTemplates([]);
-    },
+    snapshotVersion: schedule?.version?.toString() ?? '1',
   });
 
 
@@ -835,7 +821,21 @@ export default function SchedulePage() {
     setDrawerSelection(toSelection(day, block));
   };
 
+
+
   const dayOptions: DayFilter[] = ['ALL', ...DAY_ORDER];
+
+  // Show loading while checking setup
+  if (setupCheckLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-slate-900 mx-auto mb-4"></div>
+          <p className="text-sm text-slate-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col gap-4 p-4 md:p-6">
@@ -844,6 +844,7 @@ export default function SchedulePage() {
         currentStore={currentStore}
         loading={loading}
         onSelectStore={selectStore}
+
         onGenerated={() => {
           void refresh();
         }}
@@ -920,18 +921,21 @@ export default function SchedulePage() {
         </div>
 
         {/* Right: Chat Assistant */}
-        <div className="h-full">
-          <ScheduleChatAssistant
-            storeId={currentStore?.id}
-            weekId={schedule?.weekId}
-            assignments={assignments}
-            facts={scheduleFacts}
-            factsLoading={scheduleFactsLoading}
-            onPreviewCreated={fetchPreviewById}
-            preview={preview}
-            onApplyPreview={handleApplyPreview}
-            onDiscardPreview={discardPreview}
-          />
+        <div className="flex h-full min-h-0">
+          {currentStore?.id && schedule?.weekId ? (
+            <AnswerPackAssistant
+              storeId={currentStore.id}
+              isoWeek={schedule.weekId}
+              storeName={currentStore?.name}
+            />
+          ) : (
+            <div className="flex items-center justify-center w-80 bg-slate-50 border-l border-slate-200">
+              <div className="text-center text-slate-500 p-4">
+                <div className="text-sm">AI Assistant</div>
+                <div className="text-xs mt-1">Select a store and week to start</div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
