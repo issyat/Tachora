@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ErrorModal } from "@/components/ui/error-modal";
+import { AIGenerateButton } from "@/components/ui/ai-generate-button";
 import { usePreview } from "@/hooks/use-preview";
 
 import { useScheduleData } from "./hooks/useScheduleData";
@@ -857,18 +858,39 @@ export default function SchedulePage() {
         schedule={schedule}
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        {dayOptions.map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => setSelectedDay(option)}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition ${selectedDay === option ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-          >
-            {option}
-          </button>
-        ))}
+      <div className="grid grid-cols-[300px_1fr_320px] items-center gap-4">
+        <div />
+        <div className="flex justify-center">
+          <div className="flex w-full max-w-4xl items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              {dayOptions.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setSelectedDay(option)}
+                  className={`h-10 w-10 rounded-full text-xs font-semibold transition ${selectedDay === option ? 'bg-[#04ADBF] text-white shadow' : 'bg-white text-slate-600 border border-slate-200 hover:bg-[#E1F2BD]/60'}`}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+            <AIGenerateButton
+              storeId={currentStore?.id}
+              onSuccess={() => {
+                void refresh();
+              }}
+              onError={(message) =>
+                setAssignmentError({
+                  title: "Generation Failed",
+                  message: message || "Failed to generate schedule.",
+                  suggestion: "Please check your settings and try again.",
+                })
+              }
+              disabled={!currentStore || loading}
+            />
+          </div>
+        </div>
+        <div />
       </div>
 
       <ErrorModal
@@ -889,22 +911,20 @@ export default function SchedulePage() {
 
       <div className="grid grid-cols-[300px_1fr_320px] gap-4 h-[75vh]">
         {/* Left: Availability Sidebar */}
-        <div className="overflow-y-auto">
-          <AvailabilitySidebar
-            day={selectedDay === 'ALL' ? 'MON' : selectedDay}
-            storeId={currentStore?.id}
-            employees={employees}
-            assignments={assignments}
-            employeeWeeklyMinutes={employeeWeeklyMinutes}
-            crossStoreMinutes={crossStoreMinutes}
-            onSelectEmployee={(employee) => {
-              if (!drawerSelection) {
-                return;
-              }
-              void handleAssign(employee, drawerSelection);
-            }}
-          />
-        </div>
+        <AvailabilitySidebar
+          day={selectedDay === 'ALL' ? 'MON' : selectedDay}
+          storeId={currentStore?.id}
+          employees={employees}
+          assignments={assignments}
+          employeeWeeklyMinutes={employeeWeeklyMinutes}
+          crossStoreMinutes={crossStoreMinutes}
+          onSelectEmployee={(employee) => {
+            if (!drawerSelection) {
+              return;
+            }
+            void handleAssign(employee, drawerSelection);
+          }}
+        />
 
         {/* Center: Timeline (centered content) */}
         <div className="flex justify-center items-start overflow-hidden">

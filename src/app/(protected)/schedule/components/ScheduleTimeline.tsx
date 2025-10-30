@@ -1,10 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, type CSSProperties } from "react";
 
 import { DAY_ORDER } from "../utils/constants";
 import { describeShift, minutesToLeft, minutesToWidth, type DayLayout, type LaidBlock } from "../utils/layout";
 import type { DayKey } from "../types";
 
-const LANE_HEIGHT = 56;
+const LANE_HEIGHT = 64;
 const LANE_GAP = 12;
 const LANE_STRIDE = LANE_HEIGHT + LANE_GAP;
 
@@ -33,41 +33,54 @@ export function ScheduleTimeline({
     selectedDay === "ALL" ? DAY_ORDER : DAY_ORDER.filter((day) => day === selectedDay)
   ), [selectedDay]);
 
-  const containerClassName = `flex flex-col min-h-0 rounded-lg border bg-white${className ? ` ${className}` : ""}`;
+  const containerClassName = `flex flex-col min-h-0 overflow-hidden rounded-[32px] border border-[#04ADBF]/60 bg-white${className ? ` ${className}` : ""}`;
 
   return (
     <section className={containerClassName}>
-      <header className="sticky top-0 z-10 border-b bg-slate-50">
-        <div className="relative ml-20">
-          <div className="grid" style={{ gridTemplateColumns: `repeat(${hours.length - 1}, minmax(0, 1fr))` }}>
-            {hours.slice(0, -1).map((hour) => (
-              <div
-                key={hour}
-                className="border-r border-slate-200 py-2 text-center text-xs text-slate-600"
-              >
-                {String(hour).padStart(2, "0")}:00
-              </div>
-            ))}
+      <header className="sticky top-0 z-10 border-b border-[#04ADBF]/60 bg-slate-50/90 px-6 py-5 backdrop-blur-sm">
+        <div className="ml-24 pr-6">
+          <div className="relative rounded-2xl border border-[#04ADBF]/60 bg-white/95 shadow-sm">
+            <div className="grid" style={{ gridTemplateColumns: `repeat(${hours.length - 1}, minmax(0, 1fr))` }}>
+              {hours.slice(0, -1).map((hour) => (
+                <div
+                  key={hour}
+                  className="border-r border-[#04ADBF]/60 py-2 text-center text-[11px] font-semibold text-slate-600 last:border-r-0"
+                >
+                  {String(hour).padStart(2, "0")}:00
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </header>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="divide-y">
+        <div className="divide-y divide-slate-200">
           {days.map((day) => {
             const { lanes, laneCount } = layouts[day];
             const minHeight = laneCount > 0 ? laneCount * LANE_STRIDE : LANE_STRIDE;
             const blocks = lanes.slice().sort((a, b) => (a.lane === b.lane ? a.startMin - b.startMin : a.lane - b.lane));
+            const isFocused = selectedDay !== "ALL" && day === selectedDay;
             return (
-              <div key={day} className="relative border-slate-200" style={{ minHeight, paddingBottom: LANE_GAP }}>
-                <div className="absolute left-0 top-0 flex h-full w-16 items-start justify-start p-3 text-xs font-semibold text-slate-600">
-                  <span>{day}</span>
+              <div
+                key={day}
+                className={`relative bg-white transition-colors ${isFocused ? "bg-[#E1F2BD]/35" : ""}`}
+                style={{ minHeight, paddingTop: LANE_GAP / 2, paddingBottom: LANE_GAP / 2 }}
+              >
+                <div className="absolute left-0 top-4 flex h-full w-20 items-start justify-center">
+                  <span
+                    className={`rounded-full border px-4 py-1 text-[11px] font-semibold uppercase tracking-wide ${
+                      isFocused ? "border-[#04ADBF] text-[#04ADBF] bg-white" : "border-slate-200 text-slate-600 bg-white"
+                    }`}
+                  >
+                    {day}
+                  </span>
                 </div>
-                <div className="ml-16">
-                  <div className="relative" style={{ height: minHeight }}>
+                <div className="ml-24 pr-6">
+                  <div className="relative rounded-xl bg-white/80 p-2" style={{ height: minHeight }}>
                     {blocks.map((block, blockIndex) => (
                       <TimelineBlock
-                        key={`${day}-${block.workType?.name || block.role}-${block.startMin}-${block.endMin}-${block.lane}-${block.assignment?.id ?? block.templateId ?? 'template'}-${blockIndex}`}
+                        key={`${day}-${block.workType?.name || block.role}-${block.startMin}-${block.endMin}-${block.lane}-${block.assignment?.id ?? block.templateId ?? "template"}-${blockIndex}`}
                         day={day}
                         block={block}
                         windowStartMin={windowStartMin}
@@ -76,6 +89,7 @@ export function ScheduleTimeline({
                         onDropEmployee={onDropEmployee}
                       />
                     ))}
+                    <div className="pointer-events-none absolute inset-0 rounded-xl border border-white/70" />
                   </div>
                 </div>
               </div>
@@ -99,36 +113,46 @@ interface TimelineBlockProps {
 function TimelineBlock({ day, block, windowStartMin, windowEndMin, onSelectBlock, onDropEmployee }: TimelineBlockProps) {
   const left = minutesToLeft(block.startMin, windowStartMin, windowEndMin);
   const width = minutesToWidth(block.startMin, block.endMin, windowStartMin, windowEndMin);
-  const top = block.lane * LANE_STRIDE;
+  const top = block.lane * LANE_STRIDE + LANE_GAP / 2;
   const hasAssignment = Boolean(block.assignment);
   const employee = block.assignment?.employee;
+  const employeeColor = employee?.color ?? "#04ADBF";
+  const employeeInitials = employee?.name
+    ? employee.name
+        .split(" ")
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part.charAt(0).toUpperCase())
+        .join("")
+    : "";
   
   // Check if this is a preview assignment or preview template
   const isPreview = (block.assignment && 'isPreview' in block.assignment && block.assignment.isPreview) || ('isPreview' in block && block.isPreview);
   const isPreviewRemoved = Boolean(block.assignment && 'isPreviewRemoved' in block.assignment && block.assignment.isPreviewRemoved);
 
   // Different styles for preview vs regular vs removed
-  let blockClassName;
+  let blockClassName; let blockStyle: CSSProperties = {};
+  const workColor = block.workType?.color || "#04ADBF";
   if (isPreviewRemoved) {
-    // Faded/strikethrough style for removed assignments
-    blockClassName = 'border-red-300 bg-red-50/50 hover:border-red-400 opacity-50';
+    blockClassName = "border-red-300 bg-red-50/60 hover:border-red-400 opacity-60";
   } else if (isPreview) {
-    // Green/highlighted style for preview assignments
-    blockClassName = 'border-green-400 bg-green-50 hover:border-green-500 ring-2 ring-green-200';
+    blockClassName = "border-[#04ADBF] bg-[#E1F2BD]/60 hover-border-[#04ADBF]/70";
   } else if (hasAssignment) {
-    // Normal assigned style
-    blockClassName = 'border-slate-300 bg-slate-50 hover:border-slate-400';
+    blockClassName = "border-[#04ADBF]/30 bg-white hover-border-[#04ADBF]";
   } else {
-    // Open shift style
-    blockClassName = 'border-dashed border-blue-300 bg-blue-50/70 hover:border-blue-400';
+    blockClassName = "border border-dashed hover-border-[#04ADBF]";
+    blockStyle = {
+      backgroundColor: `${workColor}1A`,
+      borderColor: `${workColor}70`,
+    };
   }
 
   return (
     <div
       role="button"
       tabIndex={0}
-      className={`absolute cursor-pointer rounded-md border px-3 py-2 text-xs shadow-sm transition ${blockClassName}`}
-      style={{ left: `${left}%`, width: `${width}%`, top, height: LANE_HEIGHT, zIndex: 10 - block.lane }}
+      className={`absolute cursor-pointer rounded-lg border px-4 py-3 text-xs shadow-sm transition ${blockClassName}`}
+      style={{ left: `${left}%`, width: `${width}%`, top, height: LANE_HEIGHT, zIndex: 10 - block.lane, ...blockStyle }}
       onClick={() => onSelectBlock({ day, block })}
       onDragOver={(event) => {
         event.preventDefault();
@@ -145,28 +169,42 @@ function TimelineBlock({ day, block, windowStartMin, windowEndMin, onSelectBlock
         }
       }}
     >
-      <div className="flex items-center justify-between">
-        <span className="font-semibold text-slate-700">{block.workType?.name || block.role}</span>
-        <span className="font-medium text-slate-500">{describeShift(block.startMin, block.endMin)}</span>
-      </div>
       {employee ? (
-        <div className="mt-1 flex items-center gap-2 text-slate-600">
-          <span
-            className="h-2 w-2 rounded-full"
-            style={{ backgroundColor: employee.color }}
-            aria-hidden
-          />
-          <span className="text-xs font-medium">
-            {employee.name}
-            {isPreview && <span className="ml-1 text-green-600 font-semibold">(Preview)</span>}
-            {isPreviewRemoved && <span className="ml-1 text-red-600 line-through">(Removing)</span>}
-          </span>
+        <div className="grid h-full grid-cols-2 grid-rows-[auto_auto] gap-x-3 gap-y-1 text-[11px] font-medium text-slate-600">
+          <div className="flex items-center">
+            <span
+              className="rounded-full px-3 py-1 text-[11px] font-semibold"
+              style={{ backgroundColor: `${workColor}20`, color: workColor }}
+            >
+              {block.workType?.name || block.role}
+            </span>
+          </div>
+          <div className="flex items-center justify-end">
+            <div
+              className="flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold shadow-sm"
+              style={{ backgroundColor: `${employeeColor}20`, color: employeeColor }}
+              aria-hidden
+            >
+              {employeeInitials || employee.name.charAt(0).toUpperCase()}
+            </div>
+          </div>
+          <div className="flex items-center text-[11px] font-semibold text-[#04ADBF]">
+            {describeShift(block.startMin, block.endMin)}
+          </div>
         </div>
       ) : (
+        <>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-slate-700">{block.workType?.name || block.role}</span>
+            <span className="rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+              {describeShift(block.startMin, block.endMin)}
+            </span>
+          </div>
         <div className="mt-1 text-xs text-blue-600">
           Drop an employee
           {isPreview && <span className="ml-1 text-green-600 font-semibold">(Preview)</span>}
         </div>
+        </>
       )}
     </div>
   );

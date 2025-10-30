@@ -11,12 +11,12 @@ interface AIGenerateButtonProps {
   className?: string;
 }
 
-export function AIGenerateButton({ 
-  storeId, 
-  onSuccess, 
-  onError, 
+export function AIGenerateButton({
+  storeId,
+  onSuccess,
+  onError,
   disabled = false,
-  className = "" 
+  className = ""
 }: AIGenerateButtonProps) {
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -75,16 +75,14 @@ export function AIGenerateButton({
       onClick={handleGenerate}
       disabled={disabled || isGenerating || !storeId}
       className={`
-        relative inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold
-        transition-all duration-200 ease-in-out
-        ${isGenerating 
-          ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white cursor-wait' 
-          : 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl'
-        }
-        ${disabled || !storeId 
-          ? 'opacity-50 cursor-not-allowed' 
-          : 'hover:scale-105 active:scale-95'
-        }
+        group relative inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold text-white
+        transition-all duration-200 ease-in-out overflow-hidden
+        ${isGenerating
+          ? 'bg-gradient-to-r from-[#04ADBF] via-[#F2A30F] to-[#04ADBF] cursor-wait'
+          : 'bg-gradient-to-r from-[#04ADBF] via-[#F2A30F] to-[#04ADBF] shadow-md hover:shadow-lg'}
+        ${disabled || !storeId
+          ? 'opacity-50 cursor-not-allowed'
+          : 'hover:scale-[1.03] active:scale-95'}
         ${className}
       `}
     >
@@ -129,27 +127,23 @@ export function AIGenerateButton({
       <span className="relative">
         {isGenerating ? (
           <>
-            <span className="opacity-0">AI Generate</span>
+            <span className="opacity-0">Generate</span>
             <span className="absolute inset-0 flex items-center justify-center">
               Generating...
             </span>
           </>
         ) : (
-          'AI Generate'
+          'Generate'
         )}
       </span>
 
-      {/* Shimmer Effect */}
+      {/* Hover wave */}
       {!isGenerating && !disabled && storeId && (
-        <div className="absolute inset-0 -top-px overflow-hidden rounded-lg">
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 -translate-x-full group-hover:animate-shimmer" />
+        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
+          <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/25 to-white/0 opacity-0 group-hover:opacity-100 group-hover:animate-[wave_1.4s_linear_infinite]" />
+          <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/15 to-white/0 opacity-0 group-hover:opacity-100 group-hover:animate-[wave_1.8s_linear_infinite]" />
         </div>
       )}
-
-      {/* CP-SAT Badge */}
-      <div className="absolute -top-1 -right-1 rounded-full bg-green-500 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
-        CP-SAT
-      </div>
     </button>
   );
 }

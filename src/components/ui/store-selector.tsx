@@ -14,23 +14,20 @@ interface StoreSelectorProps {
   currentStoreId?: string;
   onStoreChange: (storeId: string) => void;
   className?: string;
+  disabled?: boolean;
 }
 
-export function StoreSelector({ stores, currentStoreId, onStoreChange, className = "" }: StoreSelectorProps) {
+export function StoreSelector({ stores, currentStoreId, onStoreChange, className = "", disabled }: StoreSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   
   const currentStore = stores.find(s => s.id === currentStoreId) || stores[0];
   
   if (stores.length <= 1) {
     return (
-      <div className={`flex items-center gap-2 ${className}`}>
+      <div className={`flex items-center gap-2 rounded-full bg-white px-5 py-2 text-sm font-semibold text-slate-700 shadow-sm ${className}`}>
         <div className="flex h-2 w-2 rounded-full bg-green-500" />
-        <span className="font-medium text-slate-900">
-          {currentStore?.name || 'No Store'}
-        </span>
-        {currentStore?.city && (
-          <span className="text-sm text-slate-500">• {currentStore.city}</span>
-        )}
+        <span>{currentStore?.name || 'No Store'}</span>
+        {currentStore?.city && <span className="text-xs text-slate-500">• {currentStore.city}</span>}
       </div>
     );
   }
@@ -39,16 +36,18 @@ export function StoreSelector({ stores, currentStoreId, onStoreChange, className
     <div className={`relative ${className}`}>
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200"
+        onClick={() => {
+          if (disabled) return;
+          setIsOpen(!isOpen);
+        }}
+        disabled={disabled}
+        className={`flex items-center gap-2 rounded-full bg-white px-6 py-2 text-sm font-semibold text-slate-700 shadow-sm transition ${
+          disabled ? 'opacity-60 cursor-not-allowed' : 'hover:bg-[#E1F2BD]/60 focus:outline-none focus:ring-2 focus:ring-[#04ADBF]/30'
+        }`}
       >
         <div className="flex h-2 w-2 rounded-full bg-green-500" />
-        <span className="font-medium text-slate-900">
-          {currentStore?.name || 'Select Store'}
-        </span>
-        {currentStore?.city && (
-          <span className="text-slate-500">• {currentStore.city}</span>
-        )}
+        <span>{currentStore?.name || 'Select Store'}</span>
+        {currentStore?.city && <span className="text-slate-500">• {currentStore.city}</span>}
         <svg 
           className={`h-4 w-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
           fill="none" 
@@ -59,7 +58,7 @@ export function StoreSelector({ stores, currentStoreId, onStoreChange, className
         </svg>
       </button>
 
-      {isOpen && (
+      {isOpen && !disabled && (
         <>
           {/* Backdrop */}
           <div 

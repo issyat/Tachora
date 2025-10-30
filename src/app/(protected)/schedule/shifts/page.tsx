@@ -1,15 +1,18 @@
-﻿"use client";
+"use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { ErrorModal } from "@/components/ui/error-modal";
 import { StoreSelector } from "@/components/ui/store-selector";
+import { readableTextColor } from "@/lib/color";
+
+type DayKey = "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT" | "SUN";
 
 type Template = {
-  id?: string; // Add ID for existing templates
+  id?: string;
   role: string;
   workTypeId?: string;
-  days: Record<string, boolean>;
+  days: Record<DayKey, boolean>;
   startTime: string;
   endTime: string;
 };
@@ -36,13 +39,70 @@ type SetupResponse = {
   workTypes: WorkType[];
 };
 
-const emptyTemplate = (): Template => ({ 
-  role: "", 
+const dayOptions: Array<{ key: DayKey; label: string; short: string }> = [
+  { key: "MON", label: "Monday", short: "Mon" },
+  { key: "TUE", label: "Tuesday", short: "Tue" },
+  { key: "WED", label: "Wednesday", short: "Wed" },
+  { key: "THU", label: "Thursday", short: "Thu" },
+  { key: "FRI", label: "Friday", short: "Fri" },
+  { key: "SAT", label: "Saturday", short: "Sat" },
+  { key: "SUN", label: "Sunday", short: "Sun" },
+] as const;
+
+const createEmptyTemplate = (): Template => ({
+  role: "",
   workTypeId: "",
-  days: { MON: false, TUE: false, WED: false, THU: false, FRI: false, SAT: false, SUN: false }, 
-  startTime: "09:00", 
-  endTime: "17:00"
+  days: dayOptions.reduce(
+    (acc, option) => {
+      acc[option.key] = false;
+      return acc;
+    },
+    {} as Record<DayKey, boolean>,
+  ),
+  startTime: "09:00",
+  endTime: "17:00",
 });
+
+const TEXT_INPUT_CLASS =
+  "rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-500 shadow-sm focus:border-[#04ADBF] focus:outline-none focus:ring-2 focus:ring-[#04ADBF]/30";
+const SELECT_INPUT_CLASS =
+  "rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition focus:border-[#04ADBF] focus:outline-none focus:ring-2 focus:ring-[#04ADBF]/30";
+const PAGE_SIZE = 6;
+
+const hexToRgba = (hex: string, alpha: number): string => {
+  if (typeof hex !== "string") return `rgba(4, 173, 191, ${alpha})`;
+  let sanitized = hex.replace("#", "");
+  if (sanitized.length === 3) {
+    sanitized = sanitized
+      .split("")
+      .map((char) => char + char)
+      .join("");
+  }
+  if (sanitized.length !== 6) {
+    return `rgba(4, 173, 191, ${alpha})`;
+  }
+  const r = parseInt(sanitized.slice(0, 2), 16);
+  const g = parseInt(sanitized.slice(2, 4), 16);
+  const b = parseInt(sanitized.slice(4, 6), 16);
+  if ([r, g, b].some((value) => Number.isNaN(value))) {
+    return `rgba(4, 173, 191, ${alpha})`;
+  }
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const timeToMinutes = (time: string): number => {
+  const [hours, minutes] = time.split(":").map((value) => Number(value));
+  return hours * 60 + minutes;
+};
+
+const formatMinutes = (total: number): string => {
+  const minutes = Math.max(0, Math.round(total));
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours > 0 && mins > 0) return `${hours}h ${mins}m`;
+  if (hours > 0) return `${hours}h`;
+  return `${mins}m`;
+};
 
 export default function ShiftsPage() {
   const [selectedStoreId, setSelectedStoreId] = useState<string>();
@@ -53,17 +113,19 @@ export default function ShiftsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<{ title: string; message: string; suggestion?: string } | null>(null);
+  const [formWarning, setFormWarning] = useState<string | null>(null);
+  const warningRef = useRef<HTMLDivElement | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
-  // modal
   const [open, setOpen] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
-  const [draft, setDraft] = useState<Template>(emptyTemplate());
+  const [draft, setDraft] = useState<Template>(createEmptyTemplate());
 
   const fetchData = (storeId?: string) => {
     let active = true;
     setIsLoading(true);
     const url = storeId ? `/api/setup?storeId=${storeId}` : "/api/setup";
-    
+
     fetch(url, { cache: "no-store" })
       .then((r) => r.json())
       .then((data: SetupResponse) => {
@@ -72,16 +134,20 @@ export default function ShiftsPage() {
         setCurrentStore(data.store ?? null);
         setWorkTypes(data.workTypes ?? []);
         setItems(data.shiftTemplates ?? []);
+        setCurrentPage(1);
       })
       .catch((err) => {
         console.error(err);
         setError({
           title: "Loading Error",
           message: "Unable to load shift templates from the server.",
-          suggestion: "Please check your internet connection and try refreshing the page."
+          suggestion: "Please check your internet connection and try refreshing the page.",
         });
       })
-      .finally(() => active && setIsLoading(false));
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+
     return () => {
       active = false;
     };
@@ -91,162 +157,143 @@ export default function ShiftsPage() {
     return fetchData(selectedStoreId);
   }, [selectedStoreId]);
 
+  useEffect(() => {
+    const pages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+    setCurrentPage((prev) => (prev > pages ? pages : prev));
+  }, [items.length]);
+
+  const stats = useMemo(() => {
+    const totalTemplates = items.length;
+    const totalActiveDays = items.reduce(
+      (sum, template) => sum + Object.values(template.days ?? {}).filter(Boolean).length,
+      0,
+    );
+    const avgDurationMinutes =
+      items.length > 0
+        ? Math.round(
+            items.reduce((sum, template) => sum + (timeToMinutes(template.endTime) - timeToMinutes(template.startTime)), 0) /
+              items.length,
+          )
+        : 0;
+
+    return [
+      { label: "Shift templates", value: totalTemplates.toString() },
+      { label: "Weekly slots", value: totalActiveDays.toString() },
+      { label: "Avg duration", value: items.length === 0 ? "—" : formatMinutes(avgDurationMinutes) },
+    ];
+  }, [items]);
+
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(items.length / PAGE_SIZE)), [items.length]);
+  const pagedItems = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return items.slice(start, start + PAGE_SIZE);
+  }, [items, currentPage]);
+
   function openCreate() {
-    setDraft(emptyTemplate());
+    setDraft(createEmptyTemplate());
     setEditIndex(null);
+    setFormWarning(null);
     setOpen(true);
   }
 
   function openEdit(index: number) {
-    setDraft(JSON.parse(JSON.stringify(items[index])));
+    setDraft({ ...items[index], days: { ...items[index].days } });
     setEditIndex(index);
+    setFormWarning(null);
     setOpen(true);
   }
 
   function updateDraft(patch: Partial<Template>) {
-    setDraft((d) => ({ ...d, ...patch }));
+    setDraft((prev) => ({ ...prev, ...patch }));
   }
 
-  function toggleDraftDay(day: string, checked: boolean) {
-    setDraft((d) => ({ ...d, days: { ...(d.days ?? {}), [day]: checked } }));
+  function toggleDraftDay(day: DayKey, checked: boolean) {
+    setDraft((prev) => ({
+      ...prev,
+      days: { ...(prev.days ?? {}), [day]: checked },
+    }));
+  }
+
+  function scrollWarningIntoView(message: string) {
+    setFormWarning(message);
+    requestAnimationFrame(() => warningRef.current?.scrollIntoView({ behavior: "smooth" }));
   }
 
   async function confirmDraft() {
     if (!draft.workTypeId) {
-      setError({
-        title: "Missing Information",
-        message: "Work type is required for this shift template.",
-        suggestion: "Please select a work type from the dropdown."
-      });
+      scrollWarningIntoView("Select a work type before saving this shift template.");
       return;
     }
     if (!draft.startTime || !draft.endTime) {
-      setError({
-        title: "Missing Times",
-        message: "Both start and end times are required.",
-        suggestion: "Please set both the start time and end time for this shift."
-      });
+      scrollWarningIntoView("Provide both start and end times for the shift.");
       return;
     }
     if (draft.startTime >= draft.endTime) {
-      setError({
-        title: "Invalid Time Range",
-        message: "End time must be after start time.",
-        suggestion: "Please adjust the times so the shift has a valid duration."
-      });
+      scrollWarningIntoView("End time must be after the start time.");
       return;
     }
-    
-    // Validate shift times are within store hours
+
     if (currentStore?.openingTime && currentStore?.closingTime) {
-      const storeOpen = new Date(`1970-01-01T${currentStore.openingTime}`);
-      const storeClose = new Date(`1970-01-01T${currentStore.closingTime}`);
-      const shiftStart = new Date(`1970-01-01T${draft.startTime}:00`);
-      const shiftEnd = new Date(`1970-01-01T${draft.endTime}:00`);
-      
-      if (shiftStart < storeOpen) {
-        setError({
-          title: "Shift Starts Too Early",
-          message: `Shift cannot start before store opens at ${currentStore.openingTime}.`,
-          suggestion: "Please adjust the start time to be within store hours."
-        });
+      if (draft.startTime < currentStore.openingTime) {
+        scrollWarningIntoView(`Shift cannot start before store opens at ${currentStore.openingTime}.`);
         return;
       }
-      
-      if (shiftEnd > storeClose) {
-        setError({
-          title: "Shift Ends Too Late", 
-          message: `Shift cannot end after store closes at ${currentStore.closingTime}.`,
-          suggestion: "Please adjust the end time to be within store hours."
-        });
+      if (draft.endTime > currentStore.closingTime) {
+        scrollWarningIntoView(`Shift cannot end after store closes at ${currentStore.closingTime}.`);
         return;
       }
     }
-    
-    const hasSelectedDays = Object.values(draft.days || {}).some(Boolean);
+
+    const hasSelectedDays = dayOptions.some((option) => draft.days?.[option.key]);
     if (!hasSelectedDays) {
-      setError({
-        title: "No Days Selected",
-        message: "Please select at least one day for this shift template.",
-        suggestion: "Check the boxes for the days when this shift should be available."
-      });
+      scrollWarningIntoView("Pick at least one day for this shift to run.");
       return;
     }
-    
+
+    setFormWarning(null);
     setError(null);
-    
-    // Store original state for potential rollback
+
     const originalItems = items;
-    
-    // Optimistic update - immediately update UI
-    let newItems;
+    const updatedDraft: Template = {
+      ...draft,
+      role: draft.role || workTypes.find((wt) => wt.id === draft.workTypeId)?.name || "",
+    };
+
+    const nextItems =
+      editIndex === null
+        ? [...items, updatedDraft]
+        : items.map((item, index) => (index === editIndex ? updatedDraft : item));
+
+    setItems(nextItems);
     if (editIndex === null) {
-      newItems = [...items, draft];
-    } else {
-      newItems = items.map((it, i) => (i === editIndex ? draft : it));
+      setCurrentPage(Math.max(1, Math.ceil(nextItems.length / PAGE_SIZE)));
     }
-    setItems(newItems);
     setOpen(false);
-    
-    // Save to server in background
     setIsSaving(true);
+
     try {
-      await saveTemplatesOptimistic(newItems);
+      await saveTemplatesOptimistic(nextItems);
     } catch (err) {
-      // Rollback on error
+      console.error("Save failed:", err);
       setItems(originalItems);
       setError({
         title: "Save Failed",
-        message: err instanceof Error ? err.message : "Unable to save template",
-        suggestion: "Please check your shift information and try again."
+        message: err instanceof Error ? err.message : "Unable to save template.",
+        suggestion: "Please review the shift details and try again.",
       });
-      setOpen(true); // Reopen modal so user can try again
-      console.error("Save failed:", err);
+      setOpen(true);
     } finally {
       setIsSaving(false);
     }
   }
 
-
-
-  // Optimistic save function without loading states
-  async function saveTemplatesOptimistic(templatesToSave: Template[]) {
-    if (!currentStore?.id) {
-      throw new Error("You need to create a store before adding shift templates. Go to the Store tab and create your store first.");
-    }
-    
-    // Transform templates to match API expectations
-    const templatesForAPI = templatesToSave
-      .filter(item => item.workTypeId) // Only save templates with work types
-      .map(item => ({
-        workTypeId: item.workTypeId,
-        days: item.days,
-        startTime: item.startTime,
-        endTime: item.endTime,
-      }));
-
-    const response = await fetch("/api/shift-templates", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ storeId: currentStore.id, templates: templatesForAPI }),
-    });
-    
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(typeof data.error === "string" ? data.error : "Unable to save templates");
-    }
-    
-    // Don't update UI here - we've already done optimistic updates
-    // The server response confirms the operation succeeded
-  }
-
-  // Immediate database delete - best practice implementation
   async function deleteTemplate(index: number) {
     const template = items[index];
-    
-    // If template doesn't have an ID, it's not saved yet - just remove from UI
+
     if (!template.id) {
-      setItems(items.filter((_, i) => i !== index));
+      const nextItems = items.filter((_, i) => i !== index);
+      setItems(nextItems);
+      setCurrentPage((prev) => Math.min(prev, Math.max(1, Math.ceil(nextItems.length / PAGE_SIZE))));
       return;
     }
 
@@ -254,191 +301,391 @@ export default function ShiftsPage() {
       setError({
         title: "Store Required",
         message: "Store not found.",
-        suggestion: "Please select a store or create one in the Store tab."
+        suggestion: "Select or create a store before managing shift templates.",
       });
       return;
     }
 
-    // Store original state for potential rollback
     const originalItems = items;
-    
-    // Immediately update UI (optimistic update)
-    const newItems = items.filter((_, i) => i !== index);
-    setItems(newItems);
+    const nextItems = items.filter((_, i) => i !== index);
+    setItems(nextItems);
     setError(null);
+    setCurrentPage((prev) => Math.min(prev, Math.max(1, Math.ceil(nextItems.length / PAGE_SIZE))));
     setIsSaving(true);
-    
-    // Delete from database immediately
+
     try {
       const response = await fetch(`/api/shift-templates?id=${template.id}&storeId=${currentStore.id}`, {
         method: "DELETE",
       });
-      
+
       const data = await response.json().catch(() => ({}));
-      
+
       if (!response.ok) {
-        throw new Error(typeof data.error === "string" ? data.error : "Failed to delete template");
+        throw new Error(typeof data.error === "string" ? data.error : "Failed to delete template.");
       }
-      
-      // Success - template is permanently deleted from database
-      console.log("Template deleted successfully:", data.deletedId);
-      
     } catch (err) {
-      // Rollback on error
+      console.error("Delete failed:", err);
       setItems(originalItems);
       setError({
         title: "Delete Failed",
-        message: err instanceof Error ? err.message : "Failed to delete template",
-        suggestion: "Please try again. The template might be in use by existing assignments."
+        message: err instanceof Error ? err.message : "Failed to delete template.",
+        suggestion: "Please try again. The template might be linked to existing assignments.",
       });
-      console.error("Delete failed:", err);
     } finally {
       setIsSaving(false);
     }
   }
 
+  async function saveTemplatesOptimistic(templatesToSave: Template[]) {
+    if (!currentStore?.id) {
+      throw new Error("Select or create a store before saving shift templates.");
+    }
+
+    const templatesForAPI = templatesToSave
+      .filter((template) => template.workTypeId)
+      .map((template) => ({
+        workTypeId: template.workTypeId,
+        days: template.days,
+        startTime: template.startTime,
+        endTime: template.endTime,
+      }));
+
+    const response = await fetch("/api/shift-templates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ storeId: currentStore.id, templates: templatesForAPI }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(typeof data.error === "string" ? data.error : "Unable to save templates.");
+    }
+
+    const updatedTemplates: Template[] = (data.templates ?? templatesToSave).map((template: Template) => ({
+      ...createEmptyTemplate(),
+      ...template,
+      days: { ...createEmptyTemplate().days, ...template.days },
+    }));
+
+    setItems(updatedTemplates);
+    setCurrentPage((prev) => Math.min(prev, Math.max(1, Math.ceil(updatedTemplates.length / PAGE_SIZE))));
+  }
+
   return (
-    <div className="rounded-xl bg-white p-6 shadow-sm">
-      <div className="flex items-end justify-between gap-4">
-        <div className="flex-1">
-          <div className="flex items-center gap-4 mb-2">
-            <h1 className="text-xl font-semibold">Shifts</h1>
-            {isSaving && (
-              <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">
-                Saving...
-              </span>
-            )}
-            <StoreSelector 
+    <div className="space-y-6">
+      <section className="rounded-3xl bg-[#04ADBF] text-white shadow-xl">
+        <div className="flex flex-col gap-6 p-6 md:flex-row md:items-end md:justify-between md:p-10">
+          <div className="space-y-4">
+            <div className="inline-flex rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-white/70">
+              Shift Template Library
+            </div>
+            <div className="space-y-2">
+              <h1 className="text-3xl font-semibold leading-tight md:text-4xl">Shifts</h1>
+              <p className="max-w-xl text-sm text-white/80 md:text-base">
+                Keep your coverage consistent week after week. Templates feed the assistant and power quick scheduling.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3 text-xs md:text-sm">
+              {stats.map((stat) => (
+                <div
+                  key={stat.label}
+                  className="rounded-full bg-white/15 px-4 py-1.5 font-medium backdrop-blur-sm transition hover:bg-white/25"
+                >
+                  <span className="font-semibold">{stat.value}</span>
+                  <span className="ml-2 text-white/70">{stat.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+ 		  <div className="flex w-full flex-col items-stretch gap-3 md:w-auto md:items-end">
+            <StoreSelector
               stores={stores}
               currentStoreId={currentStore?.id}
               onStoreChange={(storeId) => {
                 setSelectedStoreId(storeId);
                 fetchData(storeId);
               }}
+              className="self-center md:self-end"
             />
-            {currentStore?.openingTime && currentStore?.closingTime && (
-              <span className="text-xs text-slate-500 bg-blue-50 px-2 py-1 rounded border border-blue-200">
-                Store Hours: {currentStore.openingTime} - {currentStore.closingTime}
+            <button
+              type="button"
+              onClick={openCreate}
+              className="inline-flex items-center justify-center rounded-full bg-[#F2A30F] px-6 py-2.5 text-sm font-semibold text-slate-900 shadow-lg shadow-black/10 transition hover:bg-[#d9910d] hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-white/60"
+            >
+              <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/80 text-[#04ADBF]">
+                +
               </span>
-            )}
+              Add shift template
+            </button>
           </div>
-          <p className="text-sm text-slate-600">
-            Define recurring shift templates for {currentStore?.name || 'your store'}.
-          </p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={openCreate} className="rounded-md border px-3 py-2">+ Add Template</button>
-        </div>
-      </div>
+      </section>
+
+      <ErrorModal
+        open={!!error}
+        onClose={() => setError(null)}
+        title={error?.title || "Error"}
+        message={error?.message || "An unexpected error occurred"}
+        suggestion={error?.suggestion}
+      />
 
       {isLoading ? (
-        <div className="mt-6 text-sm text-slate-500">Loading…</div>
+        <div className="rounded-3xl border border-slate-200 bg-white/80 p-10 text-center text-sm text-slate-500 shadow-sm">
+          Loading your shift templates…
+        </div>
+      ) : items.length === 0 ? (
+        <div className="rounded-3xl border-2 border-dashed border-[#04ADBF]/35 bg-white/80 p-12 text-center shadow-sm">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#04ADBF]/10 text-[#04ADBF]">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+            </svg>
+          </div>
+          <h2 className="text-lg font-semibold text-slate-900">No shift templates yet</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Add templates for common schedules to help the assistant and speed up planning.
+          </p>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="mt-6 inline-flex items-center justify-center rounded-full bg-[#04ADBF] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#0394a4] focus:outline-none focus:ring-2 focus:ring-[#04ADBF]/40"
+          >
+            Create a shift template
+          </button>
+        </div>
       ) : (
         <>
-          {!currentStore && (
-            <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-              No store yet. Create your store first in the Store tab.
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-4 text-sm text-slate-600">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className="rounded-full border border-slate-300 px-3 py-1 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <span className="font-medium">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className="rounded-full border border-slate-300 px-3 py-1 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Next
+              </button>
             </div>
           )}
 
-          <ErrorModal
-            open={!!error}
-            onClose={() => setError(null)}
-            title={error?.title || "Error"}
-            message={error?.message || "An unexpected error occurred"}
-            suggestion={error?.suggestion}
-          />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+            {pagedItems.map((template, idx) => {
+              const workType = workTypes.find((wt) => wt.id === template.workTypeId);
+              const color = workType?.color ?? "#04ADBF";
+              const durationMinutes = timeToMinutes(template.endTime) - timeToMinutes(template.startTime);
+              const activeDays = dayOptions.filter((option) => template.days?.[option.key]);
 
-          <div className="mt-4 rounded-lg border">
-            {items.length === 0 ? (
-              <div className="p-6 text-sm text-slate-500">No shift templates yet. Add one to begin.</div>
-            ) : (
-              items.map((t, idx) => {
-                const workType = workTypes.find(wt => wt.id === t.workTypeId);
-                const activeDays = Object.entries(t.days || {}).filter(([, v]) => v).map(([k]) => k).join(" · ");
-                
-                return (
-                  <div key={idx} className="flex items-center justify-between gap-4 border-b p-4 last:border-b-0">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex items-center gap-2">
-                          {workType && (
-                            <span 
-                              className="inline-flex h-3 w-3 rounded-full" 
-                              style={{ backgroundColor: workType.color }}
-                            />
+              return (
+                <article
+                  key={`${template.id ?? "template"}-${idx}`}
+                  className="group flex h-full flex-col justify-between rounded-3xl border border-slate-200/70 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-2xl"
+                >
+                  <div className="space-y-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                          <span
+                            className="inline-flex h-3 w-3 flex-shrink-0 rounded-full"
+                            style={{ backgroundColor: color }}
+                            aria-hidden
+                          />
+                          {workType?.name || template.role || "Unnamed shift"}
+                        </div>
+                        <p className="text-sm text-slate-500">
+                          {template.startTime} – {template.endTime}
+                          {durationMinutes > 0 && (
+                            <span className="ml-2 text-xs text-slate-400">({formatMinutes(durationMinutes)})</span>
                           )}
-                          <span className="truncate font-medium text-slate-900">
-                            {t.workType?.name || workType?.name || "(no work type)"}
-                          </span>
-                        </div>
-                        <span className="truncate text-sm text-slate-500">{t.startTime} – {t.endTime}</span>
-                        <span className="truncate text-xs text-slate-500">
-                          {activeDays || "(no days)"}
-                        </span>
+                        </p>
                       </div>
-                      {workType && (
-                        <div className="text-xs text-slate-400 mt-1">
-                          Work Type: {workType.name}
-                        </div>
-                      )}
+                      <span
+                        className="rounded-full border px-3 py-1 text-xs font-semibold shadow-sm"
+                        style={{
+                          color: readableTextColor(color),
+                          backgroundColor: hexToRgba(color, 0.2),
+                          borderColor: hexToRgba(color, 0.35),
+                        }}
+                      >
+                        {workType?.name ? `${workType.name} role` : "Template"}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <button onClick={() => openEdit(idx)} className="text-sm text-slate-700 hover:underline">Edit</button>
-                      <button onClick={() => deleteTemplate(idx)} className="text-sm text-red-600 hover:underline">Delete</button>
+
+                    <div className="rounded-2xl border border-slate-200/70 bg-slate-50/70 p-4 text-xs text-slate-600">
+                      <p className="font-semibold uppercase tracking-[0.2em] text-slate-500">Assigned days</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {activeDays.length > 0 ? (
+                          activeDays.map((option) => (
+                            <span
+                              key={option.key}
+                              className="rounded-full border px-3 py-1 text-xs font-semibold shadow-sm"
+                              style={{
+                                color: color,
+                                backgroundColor: hexToRgba(color, 0.15),
+                                borderColor: hexToRgba(color, 0.3),
+                              }}
+                            >
+                              {option.short}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500">
+                            No days selected
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                );
-              })
-            )}
+
+                  <div className="mt-6 flex items-center justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => openEdit((currentPage - 1) * PAGE_SIZE + idx)}
+                      className="rounded-full bg-[#E1F2BD]/70 px-4 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-[#E1F2BD] focus:outline-none focus:ring-2 focus:ring-[#04ADBF]/30"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteTemplate((currentPage - 1) * PAGE_SIZE + idx)}
+                      className="rounded-full bg-[#FF8057]/10 px-4 py-1.5 text-xs font-semibold text-[#FF8057] transition hover:bg-[#FF8057]/20 focus:outline-none focus:ring-2 focus:ring-[#FF8057]/40"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
-
-
         </>
       )}
 
-      <Modal open={open} onClose={() => setOpen(false)} title={editIndex === null ? "Add shift template" : "Edit shift template"}>
-        <div className="grid gap-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <select 
-              value={draft.workTypeId || ''} 
-              onChange={(e) => {
-                const workType = workTypes.find(wt => wt.id === e.target.value);
-                updateDraft({ 
-                  workTypeId: e.target.value,
-                  role: workType?.name || ''
-                });
-              }} 
-              className="rounded-md border px-3 py-2"
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={editIndex === null ? "Add shift template" : "Edit shift template"}
+        widthClass="max-w-3xl"
+      >
+        <div className="max-h-[75vh] space-y-6 overflow-y-auto pr-1">
+          {formWarning && (
+            <div
+              ref={warningRef}
+              className="rounded-2xl border border-[#FF8057]/35 bg-[#FF8057]/10 px-4 py-3 text-sm font-medium text-[#8c2f1a]"
             >
-              <option value="">Select work type...</option>
-              {workTypes.map(workType => (
-                <option key={workType.id} value={workType.id}>
-                  {workType.name}
-                </option>
-              ))}
-            </select>
-            <input type="time" value={draft.startTime} onChange={(e) => updateDraft({ startTime: e.target.value })} className="rounded-md border px-3 py-2" />
-            <input type="time" value={draft.endTime} onChange={(e) => updateDraft({ endTime: e.target.value })} className="rounded-md border px-3 py-2" />
+              {formWarning}
+            </div>
+          )}
+
+          <div className="rounded-3xl border border-[#04ADBF]/30 bg-white px-5 py-4 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#04ADBF]">Shift basics</p>
+                <p className="mt-1 text-sm text-slate-600">Choose the role and time window this template should follow.</p>
+              </div>
+              {currentStore?.openingTime && currentStore?.closingTime && (
+                <span className="rounded-full border border-[#E1F2BD]/70 bg-[#E1F2BD]/40 px-3 py-1 text-[11px] font-semibold text-slate-700">
+                  Store hours {currentStore.openingTime} – {currentStore.closingTime}
+                </span>
+              )}
+            </div>
+            <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-[1.3fr_1fr_1fr]">
+              <select
+                value={draft.workTypeId || ""}
+                onChange={(event) => {
+                  const workType = workTypes.find((wt) => wt.id === event.target.value);
+                  updateDraft({
+                    workTypeId: event.target.value,
+                    role: workType?.name || draft.role,
+                  });
+                }}
+                className={SELECT_INPUT_CLASS}
+              >
+                <option value="">Select work type…</option>
+                {workTypes.map((workType) => (
+                  <option key={workType.id} value={workType.id}>
+                    {workType.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="time"
+                value={draft.startTime}
+                onChange={(event) => updateDraft({ startTime: event.target.value })}
+                className={SELECT_INPUT_CLASS}
+              />
+              <input
+                type="time"
+                value={draft.endTime}
+                onChange={(event) => updateDraft({ endTime: event.target.value })}
+                className={SELECT_INPUT_CLASS}
+              />
+            </div>
+            <label className="mt-4 block text-sm">
+              <span className="font-semibold text-slate-700">Optional label</span>
+              <input
+                value={draft.role}
+                onChange={(event) => updateDraft({ role: event.target.value })}
+                placeholder="e.g. Morning floor coverage"
+                className={`${TEXT_INPUT_CLASS} mt-1`}
+              />
+            </label>
           </div>
-          <div className="flex flex-wrap gap-3">
-            {(["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"] as const).map((d) => (
-              <label key={d} className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={Boolean(draft.days?.[d])} onChange={(e) => toggleDraftDay(d, e.target.checked)} />
-                {d}
-              </label>
-            ))}
+
+          <div className="rounded-3xl border border-slate-200 bg-slate-50/70 px-5 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-500">Weekly coverage</p>
+            <p className="mt-1 text-sm text-slate-600">Toggle the days this shift repeats.</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {dayOptions.map((option) => {
+                const active = Boolean(draft.days?.[option.key]);
+                return (
+                  <label
+                    key={option.key}
+                    className={`group flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition ${
+                      active
+                        ? "border-[#04ADBF] bg-[#04ADBF]/10 text-[#04ADBF]"
+                        : "border-slate-200 text-slate-500 hover:border-[#04ADBF]/40 hover:text-[#04ADBF]"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={active}
+                      onChange={(event) => toggleDraftDay(option.key, event.target.checked)}
+                      className="sr-only"
+                    />
+                    <span>{option.short}</span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
-          <ErrorModal
-            open={!!error}
-            onClose={() => setError(null)}
-            title={error?.title || "Error"}
-            message={error?.message || "An unexpected error occurred"}
-            suggestion={error?.suggestion}
-          />
-          <div className="flex justify-end gap-2">
-            <button onClick={() => setOpen(false)} className="rounded-md border px-3 py-2">Cancel</button>
-            <button onClick={confirmDraft} className="rounded-md bg-slate-800 px-3 py-2 text-white">Save</button>
+
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-full border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-600 transition hover:border-[#04ADBF]/40 hover:text-[#04ADBF]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmDraft}
+              disabled={isSaving}
+              className="rounded-full bg-gradient-to-r from-[#04ADBF] via-[#F2A30F] to-[#E1F2BD] px-6 py-2 text-sm font-semibold text-slate-900 shadow-sm transition hover:scale-[1.01] focus:outline-none focus:ring-2 focus:ring-[#04ADBF]/40 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSaving ? "Saving…" : "Save shift"}
+            </button>
           </div>
         </div>
       </Modal>

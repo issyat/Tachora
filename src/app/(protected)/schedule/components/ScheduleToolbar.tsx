@@ -24,37 +24,17 @@ export function ScheduleToolbar({
   onGenerated,
   onError,
 
-  schedule,
+  schedule: _schedule,
 }: ScheduleToolbarProps) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border bg-white p-4 shadow-sm">
-      <div className="flex items-center gap-6">
-        <div className="space-y-1">
-          <h1 className="text-lg font-semibold text-slate-900">Schedule</h1>
-          {schedule ? (
-            <p className="text-sm text-slate-500">
-              {schedule.state}
-            </p>
-          ) : (
-            <p className="text-sm text-slate-500">Select a store to view the weekly schedule.</p>
-          )}
-        </div>
-
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
+    <div className="flex w-full justify-center">
         <StoreSelector
+          className="max-w-xs w-full justify-center"
           stores={stores}
           currentStoreId={currentStore?.id}
           onStoreChange={onSelectStore}
           disabled={loading}
         />
-        <AIGenerateButton
-          storeId={currentStore?.id}
-          onSuccess={onGenerated}
-          onError={onError}
-          disabled={!currentStore || loading}
-        />
-      </div>
     </div>
   );
 }

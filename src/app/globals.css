@@ -8,7 +8,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-rethink);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -22,7 +22,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), sans-serif;
 }
 
 /* AI Generate Button Animations */
@@ -35,6 +35,161 @@ body {
   }
 }
 
+@keyframes wave {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+
 .animate-shimmer {
   animation: shimmer 2s ease-in-out infinite;
+}
+
+@keyframes assistant-fade-in-up {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-assistant-fade-in-up {
+  animation: assistant-fade-in-up 0.45s ease forwards;
+}
+
+@keyframes assistant-badge-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(4, 173, 191, 0.4);
+  }
+  55% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 12px rgba(4, 173, 191, 0);
+  }
+}
+
+.animate-assistant-badge {
+  animation: assistant-badge-pulse 2.8s ease-in-out infinite;
+}
+
+@keyframes assistant-gradient-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 100% 50%;
+  }
+}
+
+.animate-assistant-gradient {
+  animation: assistant-gradient-flow 5.5s ease-in-out infinite;
+  background-size: 220% 220%;
+}
+
+@keyframes assistant-dot-bounce {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-5px);
+  }
+}
+
+.assistant-loader-dot {
+  animation: assistant-dot-bounce 1s ease-in-out infinite;
+}
+
+.assistant-loader-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.assistant-loader-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes wiggle-slow {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  20% {
+    transform: rotate(-4deg);
+  }
+  40% {
+    transform: rotate(4deg);
+  }
+  60% {
+    transform: rotate(-2deg);
+  }
+  80% {
+    transform: rotate(2deg);
+  }
+}
+
+.animate-wiggle-slow {
+  animation: wiggle-slow 4.5s ease-in-out infinite;
+  transform-origin: 50% 50%;
+}
+
+@keyframes logo-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(4, 173, 191, 0.18), 0 0 0 rgba(4, 173, 191, 0.12);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(4, 173, 191, 0.45), 0 0 36px rgba(4, 173, 191, 0.25);
+  }
+}
+
+.animate-logo-glow {
+  animation: logo-glow 4.5s ease-in-out infinite;
+}
+
+@keyframes logo-wave {
+  0% {
+    transform: scale(0.95) rotate(0deg);
+    opacity: 0.65;
+  }
+  50% {
+    transform: scale(1.05) rotate(2deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.95) rotate(0deg);
+    opacity: 0.65;
+  }
+}
+
+@keyframes logo-wave-secondary {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(0.8);
+    opacity: 0.25;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.05);
+    opacity: 0.4;
+  }
+}
+
+.animate-logo-wave {
+  animation: logo-wave 4.5s ease-in-out infinite;
+}
+
+.animate-logo-wave-secondary {
+  animation: logo-wave-secondary 4.5s ease-in-out infinite;
 }

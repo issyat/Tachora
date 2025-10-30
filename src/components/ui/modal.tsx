@@ -8,9 +8,10 @@ type ModalProps = {
   onClose: () => void;
   children: React.ReactNode;
   widthClass?: string;
+  zIndexClass?: string;
 };
 
-export function Modal({ open, title, onClose, children, widthClass = "max-w-lg" }: ModalProps) {
+export function Modal({ open, title, onClose, children, widthClass = "max-w-lg", zIndexClass = "z-50" }: ModalProps) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -23,7 +24,7 @@ export function Modal({ open, title, onClose, children, widthClass = "max-w-lg" 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50" aria-modal="true" role="dialog">
+    <div className={`fixed inset-0 ${zIndexClass}`} aria-modal="true" role="dialog">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="absolute inset-0 flex items-start justify-center p-4 pt-8">
         <div className={`w-full ${widthClass} rounded-2xl bg-white p-6 shadow-xl`}>

@@ -102,81 +102,164 @@ export const AssignmentDrawer = memo(function AssignmentDrawer({
           canAssign: validationErrors.length === 0,
         };
       })
-      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+      .filter((item): item is NonNullable<typeof item> => Boolean(item))
+      .sort((a, b) => {
+        if (a.canAssign === b.canAssign) {
+          return a.employee.name.localeCompare(b.employee.name);
+        }
+        return a.canAssign ? -1 : 1;
+      });
   }, [assignment?.id, day, dayIndex, employees, endMin, workType, selection, snapshots, startMin, storeId, templateWorkTypes]);
 
   return (
-    <Modal open={Boolean(selection)} onClose={onClose} title="Shift details" widthClass="max-w-xl">
-      <div className="space-y-4">
-        <header className="space-y-1">
-          <h2 className="text-base font-semibold text-slate-900">{workType.name}</h2>
-          <p className="text-sm text-slate-500">{day} - {timeRangeLabel} ({durationLabel})</p>
+    <Modal open={Boolean(selection)} onClose={onClose} title="Shift details" widthClass="max-w-3xl">
+      <div className="space-y-6">
+        <header className="rounded-3xl border border-[#04ADBF]/30 bg-white/85 p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span
+                className="rounded-full px-3 py-1 text-sm font-semibold"
+                style={{ backgroundColor: `${workType.color}20`, color: workType.color }}
+              >
+                {workType.name}
+              </span>
+              <span className="rounded-full bg-[#E1F2BD]/60 px-3 py-1 text-[11px] font-semibold text-slate-700">
+                {day}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-[#04ADBF]">
+              <span className="rounded-full bg-[#04ADBF]/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#04ADBF]">
+                {durationLabel}
+              </span>
+              <span className="text-slate-500">•</span>
+              <span>{timeRangeLabel}</span>
+            </div>
+          </div>
         </header>
 
         {assignment?.employee ? (
-          <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3">
-            <div className="text-sm font-medium text-slate-700">Assigned to {assignment.employee.name}</div>
-            <button
-              type="button"
-              className="rounded bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700"
-              onClick={() => onUnassign(assignment)}
-            >
-              Unassign
-            </button>
+          <div className="rounded-3xl border border-[#04ADBF]/25 bg-[#04ADBF]/5 p-5 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold"
+                  style={{ backgroundColor: `${assignment.employee.color ?? '#04ADBF'}20`, color: assignment.employee.color ?? '#04ADBF' }}
+                >
+                  {assignment.employee.name
+                    .split(" ")
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .map((part) => part.charAt(0).toUpperCase())
+                    .join("")}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Assigned to {assignment.employee.name}</p>
+                  <p className="text-xs text-slate-500">Drag someone else or unassign below.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="rounded-full border border-[#FF8057]/50 bg-[#FF8057]/10 px-4 py-2 text-sm font-semibold text-[#FF8057] transition hover:bg-[#FF8057]/20"
+                onClick={() => onUnassign(assignment)}
+              >
+                Unassign
+              </button>
+            </div>
           </div>
         ) : (
-          <div className="rounded-md border border-dashed border-slate-300 p-3 text-sm text-slate-500">
-            No employee assigned yet.
+          <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-500 shadow-sm">
+            <p className="font-semibold text-slate-600">No one is assigned yet.</p>
+            <p className="mt-1 text-xs">Pick a teammate from the list below or drop them directly onto the shift.</p>
           </div>
         )}
 
-        <section className="space-y-2">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Available employees ({employeeRows.length})
+        {assignment?.employee ? (
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-sm">
+            Unassign this shift to explore other available teammates.
           </div>
-          <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-            {employeeRows.map(({ employee, availabilityLabel, weeklyMinutes, validationErrors, canAssign }) => (
-              <div
-                key={employee.id}
-                className={`rounded border p-3 ${canAssign ? 'border-slate-200 bg-white' : 'border-amber-200 bg-amber-50'}`}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium text-slate-900">{employee.name}</div>
-
-                  </div>
-                  <span className="text-xs text-slate-500">{availabilityLabel}</span>
-                </div>
-                <div className="mt-2 flex items-center justify-between text-xs">
-                  <span className="text-slate-500">Weekly</span>
-                  <span className="font-medium text-slate-600">{formatMinutesAsHours(weeklyMinutes)}</span>
-                </div>
-                {validationErrors.length > 0 && (
-                  <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-amber-700">
-                    {validationErrors.map((message) => (
-                      <li key={message}>{message}</li>
-                    ))}
-                  </ul>
-                )}
-                <div className="mt-3 flex justify-end">
-                  <button
-                    type="button"
-                    className={`rounded px-3 py-1 text-xs font-medium ${
-                      canAssign ? 'bg-slate-900 text-white hover:bg-slate-700' : 'cursor-not-allowed bg-slate-200 text-slate-500'
-                    }`}
-                    disabled={!canAssign}
-                    onClick={() => {
-                      setError(null);
-                      onAssign(employee, selection);
-                    }}
-                  >
-                    Assign
-                  </button>
-                </div>
+        ) : (
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-500">
+                  Available employees
+                </p>
+                <p className="text-sm text-slate-500">
+                  {employeeRows.length} matching teammate{employeeRows.length === 1 ? "" : "s"} for {day}.
+                </p>
               </div>
-            ))}
-          </div>
-        </section>
+            </div>
+            <div className="max-h-[340px] space-y-3 overflow-y-auto pr-1">
+              {employeeRows.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-6 text-center text-sm text-slate-500">
+                  No available employees for this shift window.
+                </div>
+              ) : (
+                employeeRows.map(({ employee, availabilityLabel, weeklyMinutes, validationErrors, canAssign }) => (
+                  <div
+                    key={employee.id}
+                    className={`rounded-3xl border p-4 transition ${
+                      canAssign
+                        ? "border-white bg-white shadow-sm hover:border-[#04ADBF]/40 hover:shadow-md"
+                        : "border-[#F2A30F]/40 bg-[#F2A30F]/10"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold"
+                          style={{ backgroundColor: `${employee.color ?? '#04ADBF'}20`, color: employee.color ?? '#04ADBF' }}
+                        >
+                          {employee.name
+                            .split(" ")
+                            .filter(Boolean)
+                            .slice(0, 2)
+                            .map((part) => part.charAt(0).toUpperCase())
+                            .join("")}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">{employee.name}</p>
+                          <p className="text-xs text-[#04ADBF]">{availabilityLabel}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-600">
+                          Weekly {formatMinutesAsHours(weeklyMinutes)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {validationErrors.length > 0 && (
+                      <ul className="mt-3 list-disc space-y-1 pl-6 text-xs text-[#F2A30F]">
+                        {validationErrors.map((message) => (
+                          <li key={message}>{message}</li>
+                        ))}
+                      </ul>
+                    )}
+
+                    <div className="mt-4 flex justify-end">
+                      <button
+                        type="button"
+                        className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+                          canAssign
+                            ? "bg-gradient-to-r from-[#04ADBF] via-[#F2A30F] to-[#E1F2BD] text-slate-900 hover:scale-[1.01]"
+                            : "cursor-not-allowed bg-slate-200 text-slate-500"
+                        }`}
+                        disabled={!canAssign}
+                        onClick={() => {
+                          setError(null);
+                          onAssign(employee, selection);
+                        }}
+                      >
+                        Assign to shift
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        )}
 
         <ErrorModal
           open={!!error}
@@ -189,7 +272,7 @@ export const AssignmentDrawer = memo(function AssignmentDrawer({
         <div className="flex justify-end">
           <button
             type="button"
-            className="rounded border px-3 py-1 text-sm hover:bg-slate-50"
+            className="rounded-full border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-600 transition hover:border-[#04ADBF]/40 hover:text-[#04ADBF]"
             onClick={() => onClose()}
           >
             Close
